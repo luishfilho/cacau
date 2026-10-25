@@ -5,7 +5,7 @@ window.CACAU_WEB_CONFIG = {
   clientId: '423371820715-put6v1djqjsgp42dlhnkc7ogcbns13mg.apps.googleusercontent.com',
   // Seletor de planilhas (Google Picker), usado na permissão mínima (drive.file):
   projectNumber: '423371820715', // número do projeto no Google Cloud (prefixo do ID do cliente)
-  apiKey: ''                     // chave de API do navegador, restrita ao site (preencher)
+  apiKey: 'AIzaSyCv8a8qGtNf09fEz0RoJkNAvjyd1deMWT8' // chave de API do navegador (pública por natureza; restrita ao site no Google Cloud)
 };
 
 /**
