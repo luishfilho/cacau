@@ -4583,31 +4583,45 @@ var CacauBackend = (function () {
     });
   }
 
+  /**
+   * Tela de entrada. Quem já tem planilha guardada só vê "Entrar"; quem ainda não tem escolhe entre criar uma
+   * ou escolher uma existente. O que é técnico (permissão, código da planilha, modo gravação) fica em "Opções avançadas".
+   */
   function showGate_(message, onDone) {
     var saved = '';
     try { saved = localStorage.getItem(SHEET_KEY) || ''; } catch (e) { /* segue */ }
+    var native = nativeLogin_();
     var gate = document.getElementById('cacau-gate');
     if (gate) gate.remove();
     gate = document.createElement('div');
     gate.id = 'cacau-gate';
     gate.setAttribute('style', 'position:fixed;inset:0;z-index:150;overflow:auto;background:var(--bg,#FFF4DC);color:var(--text,#3b2314);display:flex;align-items:center;justify-content:center;padding:16px');
-    var btn = 'font-size:16px;padding:12px';
+    var btn = 'font-size:16px;padding:12px;border-radius:10px;cursor:pointer';
+    var primary = btn + ';background:var(--accent,#8a4b25);color:#fff;border:0';
+    var secondary = btn + ';background:transparent;color:inherit;border:1px solid rgba(0,0,0,.25)';
+    var newPickHtml =
+      '<button id="cacau-new" style="' + (saved ? secondary : primary) + '">Entrar e criar ' + (saved ? 'outra planilha' : 'minha planilha') + '</button>' +
+      '<button id="cacau-pick" style="' + secondary + '">Entrar e escolher ' + (saved ? 'outra planilha' : 'uma planilha que já tenho') + '</button>';
     gate.innerHTML =
-      '<div style="max-width:420px;width:100%;display:flex;flex-direction:column;gap:12px;font-family:system-ui,sans-serif">' +
-      '<h2 style="margin:0">Cacau <small style="font-weight:normal;font-size:13px">(protótipo web)</small></h2>' +
+      '<div style="max-width:380px;width:100%;display:flex;flex-direction:column;gap:12px;font-family:system-ui,sans-serif">' +
+      '<h1 style="margin:0;font-size:30px">Cacau</h1>' +
+      '<p style="margin:0;opacity:.8">Suas finanças numa planilha só sua, no seu Google Drive.</p>' +
       (message ? '<p style="margin:0;color:#b00">' + message + '</p>' : '') +
-      (nativeLogin_() ? '' : '<label style="font-size:13px">Permissão pedida ao Google</label>') +
-      '<select id="cacau-scope" style="font-size:15px;padding:8px' + (nativeLogin_() ? ';display:none' : '') + '">' +
-      '<option value="full"' + (scopeMode_() === 'full' ? ' selected' : '') + '>Completa: ver as planilhas da conta (Google avisa “não verificado”)</option>' +
-      '<option value="file"' + (scopeMode_() === 'file' ? ' selected' : '') + '>Mínima (drive.file): só planilhas criadas ou escolhidas aqui</option>' +
-      '</select>' +
-      '<button id="cacau-new" style="' + btn + '">Criar minha planilha</button>' +
-      '<button id="cacau-pick" style="' + btn + '">Escolher uma planilha existente</button>' +
-      '<label style="font-size:13px">ou informe o código (ID) ou link da planilha</label>' +
-      '<input id="cacau-sheet" style="font-size:16px;padding:10px" placeholder="1AbC… ou link da planilha" value="' + saved.replace(/"/g, '&quot;') + '">' +
-      '<label style="font-size:13px;display:flex;gap:8px;align-items:flex-start"><input type="checkbox" id="cacau-write"' + (writeMode_() ? ' checked' : '') + ' style="margin-top:3px"> <span><b>Modo gravação</b> (lançar, editar e apagar valem de verdade na planilha). Para testar, use uma <b>cópia</b> da planilha.</span></label>' +
-      '<button id="cacau-go" style="' + btn + '">' + (nativeLogin_() ? 'Entrar' : 'Entrar com o Google') + '</button>' +
+      (saved ? '<button id="cacau-go" style="' + primary + '">Entrar</button>' : newPickHtml) +
       '<p id="cacau-gate-msg" style="margin:0;color:#b00;font-size:13px"></p>' +
+      '<details style="font-size:13px"><summary style="cursor:pointer;opacity:.7">Opções avançadas</summary>' +
+      '<div style="display:flex;flex-direction:column;gap:10px;margin-top:10px">' +
+      (native ? '' : '<label>Permissão pedida ao Google</label>') +
+      '<select id="cacau-scope" style="font-size:14px;padding:8px' + (native ? ';display:none' : '') + '">' +
+      '<option value="file"' + (scopeMode_() === 'file' ? ' selected' : '') + '>Mínima (recomendada): só planilhas criadas ou escolhidas aqui</option>' +
+      '<option value="full"' + (scopeMode_() === 'full' ? ' selected' : '') + '>Completa: ver todas as planilhas da conta (Google avisa “não verificado”)</option>' +
+      '</select>' +
+      '<label>Código (ID) ou link da planilha</label>' +
+      '<input id="cacau-sheet" style="font-size:15px;padding:10px" placeholder="1AbC… ou link da planilha" value="' + saved.replace(/"/g, '&quot;') + '">' +
+      '<button id="cacau-use" style="' + secondary + '">Entrar com esta planilha</button>' +
+      (saved ? newPickHtml : '') +
+      '<label style="display:flex;gap:8px;align-items:flex-start"><input type="checkbox" id="cacau-write"' + (writeMode_() ? ' checked' : '') + ' style="margin-top:3px"> <span><b>Modo gravação</b>: lançar, editar e apagar valem de verdade na planilha. Desligado, o app só lê.</span></label>' +
+      '</div></details>' +
       '</div>';
     document.body.appendChild(gate);
     var msg = gate.querySelector('#cacau-gate-msg');
@@ -4617,27 +4631,35 @@ var CacauBackend = (function () {
     function fail_(err) { busy_(false); msg.textContent = 'Não deu: ' + err.message; }
     function login_() {
       setScopeMode_(gate.querySelector('#cacau-scope').value);
+      setWriteMode_(gate.querySelector('#cacau-write').checked);
       msg.textContent = 'Abrindo o login do Google…';
       busy_(true);
       return requestToken_(everSignedIn ? '' : 'select_account');
     }
-
-    gate.querySelector('#cacau-go').onclick = function () {
-      var raw = gate.querySelector('#cacau-sheet').value.trim();
+    function sheetIdFrom_(raw) {
+      raw = (raw || '').trim();
       var m = raw.match(/\/d\/([a-zA-Z0-9_-]{20,})/);
       var id = m ? m[1] : raw;
-      if (!/^[a-zA-Z0-9_-]{20,}$/.test(id)) { msg.textContent = 'Esse código/link de planilha não parece válido.'; return; }
-      setWriteMode_(gate.querySelector('#cacau-write').checked);
+      return /^[a-zA-Z0-9_-]{20,}$/.test(id) ? id : '';
+    }
+    function enterWith_(raw) {
+      var id = sheetIdFrom_(raw);
+      if (!id) { msg.textContent = 'Esse código/link de planilha não parece válido.'; return; }
       login_().then(function () { useSheet_(id); return fetchEmail_(); }).then(done_).catch(fail_);
-    };
-    gate.querySelector('#cacau-new').onclick = function () {
+    }
+
+    var go = gate.querySelector('#cacau-go');
+    if (go) go.onclick = function () { enterWith_(saved); };
+    gate.querySelector('#cacau-use').onclick = function () { enterWith_(gate.querySelector('#cacau-sheet').value); };
+    var nw = gate.querySelector('#cacau-new');
+    if (nw) nw.onclick = function () {
       login_().then(fetchEmail_).then(function () {
         msg.textContent = 'Criando e preparando a planilha…';
         return createSheet_();
       }).then(done_).catch(fail_);
     };
-    gate.querySelector('#cacau-pick').onclick = function () {
-      setWriteMode_(gate.querySelector('#cacau-write').checked);
+    var pk = gate.querySelector('#cacau-pick');
+    if (pk) pk.onclick = function () {
       login_().then(function () { msg.textContent = 'Abrindo o seletor de planilhas…'; return pickSheet_(); }).then(function (id) {
         if (!id) { busy_(false); msg.textContent = 'Nenhuma planilha escolhida.'; return null; }
         useSheet_(id);
