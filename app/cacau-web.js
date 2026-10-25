@@ -2,7 +2,10 @@
 // Preencher com o "ID do cliente" do tipo "Aplicativo da Web" criado no Console do Google Cloud,
 // com a origem https://luishfilho.github.io autorizada.
 window.CACAU_WEB_CONFIG = {
-  clientId: '423371820715-put6v1djqjsgp42dlhnkc7ogcbns13mg.apps.googleusercontent.com'
+  clientId: '423371820715-put6v1djqjsgp42dlhnkc7ogcbns13mg.apps.googleusercontent.com',
+  // Seletor de planilhas (Google Picker), usado na permissão mínima (drive.file):
+  projectNumber: '423371820715', // número do projeto no Google Cloud (prefixo do ID do cliente)
+  apiKey: ''                     // chave de API do navegador, restrita ao site (preencher)
 };
 
 /**
@@ -390,16 +393,29 @@ var CacauWriter = (function () {
     throw new Error('Operação desconhecida: ' + op.op);
   }
 
+  // Operações em abas DIFERENTES não dependem uma da outra, e estas quatro (criar aba, congelar
+  // linha, formato de texto, inserir coluna) também não mudam o que as demais gravam: então
+  // sobem para o começo, em lotes. Sem isso, uma planilha nova (20 abas) virava ~60 chamadas.
+  // deleteRow/deleteSheet/clearContent/setValues/append ficam na ordem original (índices de linha).
+  var HOISTABLE = { setFrozenRows: true, setNumberFormat: true, insertColumnsAfter: true };
+
   function plan(ops) {
-    var steps = [];
+    var inserts = [], hoisted = [], rest = [];
     ops.forEach(function (op) {
+      if (op.op === 'insertSheet') inserts.push(op);
+      else if (HOISTABLE[op.op]) hoisted.push(op);
+      else rest.push(op);
+    });
+    var steps = [];
+    inserts.concat(hoisted, rest).forEach(function (op) {
       var kind = kindOf_(op);
       var last = steps[steps.length - 1];
       // aba criada no próprio passo ainda não tem sheetId: quem a usar vai para o passo seguinte
       var usesNewSheet = kind === 'structure' && op.op !== 'insertSheet' && last && last.kind === 'structure' &&
         last.ops.some(function (o) { return o.op === 'insertSheet' && o.sheet === op.sheet; });
-      // appends nunca se juntam: cada um é uma chamada, na ordem
-      if (last && last.kind === kind && kind !== 'append' && !usesNewSheet) last.ops.push(op);
+      var mergeable = last && last.kind === kind && !usesNewSheet &&
+        (kind !== 'append' || last.ops[0].sheet === op.sheet); // appends só se juntam na mesma aba
+      if (mergeable) last.ops.push(op);
       else steps.push({ kind: kind, ops: [op] });
     });
     return steps;
@@ -460,7 +476,8 @@ var CacauWriter = (function () {
         } };
       case 'append': {
         var op = step.ops[0];
-        var rows = op.op === 'appendRow' ? [op.values] : op.values;
+        var rows = [];
+        step.ops.forEach(function (o) { rows = rows.concat(o.op === 'appendRow' ? [o.values] : o.values); });
         var vals = matrix_(rows, tz, toSerial);
         return {
           method: 'POST',
@@ -4224,6 +4241,7 @@ return {
   updatePlan: (typeof updatePlan === 'function' ? updatePlan : function () { throw new Error('"updatePlan" não existe na versão web.'); }),
   updateTransaction: (typeof updateTransaction === 'function' ? updateTransaction : function () { throw new Error('"updateTransaction" não existe na versão web.'); }),
   updateTransfer: (typeof updateTransfer === 'function' ? updateTransfer : function () { throw new Error('"updateTransfer" não existe na versão web.'); }),
+  seedSpreadsheet_: seedSpreadsheet_,
   __SCHEMA: SCHEMA,
   __TEXT_COLUMNS: TEXT_COLUMNS
 };
@@ -4237,6 +4255,11 @@ return {
  *     expõe como SpreadsheetApp) e roda a MESMA função do servidor (CacauServer) em cima dele.
  *  3. Mede tudo (tempo, chamadas à API, validade do token) num painel de diagnóstico.
  *
+ * Duas permissões (escolhidas na tela de entrada, guardadas no navegador):
+ *   full  (padrão) escopo "spreadsheets": enxerga qualquer planilha da conta (sensível: exige verificação do Google)
+ *   file  escopo "drive.file": só enxerga planilhas que o próprio app criou ou que a pessoa escolheu
+ *         no seletor do Google (Picker). Experimento: ainda não decidido qual das duas fica.
+ *
  * Duas modalidades (interruptor "modo gravação", guardado no navegador):
  *   leitura   (padrão) gravações do servidor são recusadas; leituras que "arrumam" a planilha
  *             valem só na memória
@@ -4248,7 +4271,11 @@ return {
  */
 var CacauBackend = (function () {
   var cfg = window.CACAU_WEB_CONFIG || {};
-  var SCOPE = 'openid email https://www.googleapis.com/auth/spreadsheets';
+  var SCOPES = {
+    full: 'openid email https://www.googleapis.com/auth/spreadsheets',
+    file: 'openid email https://www.googleapis.com/auth/drive.file'
+  };
+  var SCOPE_KEY = 'cacau-web-scope';
   var SHEET_KEY = 'cacau-web-sheet-id';
   var DIAG_KEY = 'cacau-web-diag-off';
   var META_TTL_MS = 5 * 60 * 1000;
@@ -4260,6 +4287,7 @@ var CacauBackend = (function () {
   var CONFLICT_MESSAGE = 'A planilha foi alterada em outro lugar (outro aparelho ou aba) enquanto você editava. Nada foi gravado: recarregue e tente de novo.';
 
   var tokenClient = null;
+  var tokenClientMode = '';
   var pendingToken = null; // { resolve, reject }
   var token = { value: '', expiresAt: 0, grantedAt: 0 };
   var everSignedIn = false;
@@ -4269,6 +4297,19 @@ var CacauBackend = (function () {
   var gateDone = null;
   var stats = { apiCalls: 0, calls: [], events: [] };
   var queue = Promise.resolve();
+
+  function scopeMode_() {
+    try { return localStorage.getItem(SCOPE_KEY) === 'file' ? 'file' : 'full'; } catch (e) { return 'full'; }
+  }
+  /** Trocar de permissão invalida o token atual (foi emitido para outro escopo). */
+  function setScopeMode_(mode) {
+    if (mode === scopeMode_()) return;
+    try { if (mode === 'file') localStorage.setItem(SCOPE_KEY, 'file'); else localStorage.removeItem(SCOPE_KEY); } catch (e) { /* segue */ }
+    tokenClient = null;
+    token = { value: '', expiresAt: 0, grantedAt: 0 };
+    everSignedIn = false;
+    try { sessionStorage.removeItem(TOKEN_KEY); } catch (e) { /* segue */ }
+  }
 
   function writeMode_() {
     try { return localStorage.getItem(WRITE_KEY) === '1'; } catch (e) { return false; }
@@ -4293,7 +4334,7 @@ var CacauBackend = (function () {
     var box = document.getElementById('cacau-diag');
     if (!box) return;
     var left = token.expiresAt ? Math.max(0, Math.round((token.expiresAt + TOKEN_MARGIN_MS - Date.now()) / 1000)) : 0;
-    var lines = ['<b>Diagnóstico (protótipo)</b> — modo ' + (writeMode_() ? '<b style="color:#fc6">GRAVAÇÃO</b>' : 'leitura') + ' · token vale mais ' + left + ' s · ' + stats.apiCalls + ' chamadas à API'];
+    var lines = ['<b>Diagnóstico (protótipo)</b> — modo ' + (writeMode_() ? '<b style="color:#fc6">GRAVAÇÃO</b>' : 'leitura') + ' · permissão ' + (scopeMode_() === 'file' ? '<b style="color:#9f9">mínima (drive.file)</b>' : 'completa') + ' · token vale mais ' + left + ' s · ' + stats.apiCalls + ' chamadas à API'];
     stats.calls.slice(0, 5).forEach(function (c) {
       lines.push(hhmmss_(c.at) + ' ' + c.fn + ' · ' + c.ms + ' ms (rede ' + c.netMs + ' ms, ' + c.api + ' req, ' + Math.round(c.bytes / 1024) + ' KB)' + (c.writes ? ' · ' + c.writes + ' gravação(ões)' : '') + (c.error ? ' · ERRO ' + c.error : ''));
     });
@@ -4339,12 +4380,13 @@ var CacauBackend = (function () {
   }
 
   function initClient_() {
-    if (tokenClient) return Promise.resolve();
+    if (tokenClient && tokenClientMode === scopeMode_()) return Promise.resolve();
     if (!cfg.clientId) return Promise.reject(new Error('Falta o ID do cliente OAuth (web/config.js).'));
     return whenGsi_().then(function () {
+      tokenClientMode = scopeMode_();
       tokenClient = google.accounts.oauth2.initTokenClient({
         client_id: cfg.clientId,
-        scope: SCOPE,
+        scope: SCOPES[tokenClientMode],
         callback: function (resp) {
           var p = pendingToken; pendingToken = null;
           if (resp.error) {
@@ -4352,10 +4394,10 @@ var CacauBackend = (function () {
             if (p) p.reject(new Error(resp.error_description || resp.error));
             return;
           }
-          token = { value: resp.access_token, expiresAt: Date.now() + Number(resp.expires_in || 3600) * 1000 - TOKEN_MARGIN_MS, grantedAt: Date.now() };
+          token = { value: resp.access_token, expiresAt: Date.now() + Number(resp.expires_in || 3600) * 1000 - TOKEN_MARGIN_MS, grantedAt: Date.now(), mode: tokenClientMode };
           everSignedIn = true;
           saveToken_();
-          event_('token novo (vale ' + Math.round(Number(resp.expires_in || 3600) / 60) + ' min)');
+          event_('token novo (vale ' + Math.round(Number(resp.expires_in || 3600) / 60) + ' min) · permissões: ' + String(resp.scope || '?').replace(/https:\/\/www\.googleapis\.com\/auth\//g, ''));
           if (p) p.resolve();
         },
         error_callback: function (err) {
@@ -4383,7 +4425,7 @@ var CacauBackend = (function () {
   function restoreToken_() {
     try {
       var saved = JSON.parse(sessionStorage.getItem(TOKEN_KEY) || 'null');
-      if (saved && saved.value && Date.now() < saved.expiresAt) { token = saved; everSignedIn = true; return true; }
+      if (saved && saved.value && Date.now() < saved.expiresAt && (saved.mode || 'full') === scopeMode_()) { token = saved; everSignedIn = true; return true; }
     } catch (e) { /* segue */ }
     return false;
   }
@@ -4433,6 +4475,65 @@ var CacauBackend = (function () {
   }
 
   // ---------- tela de entrada ----------
+  var NEW_SHEET = {
+    properties: { title: 'Cacau', locale: 'pt_BR', timeZone: 'America/Sao_Paulo' },
+    // a aba que o Google cria junto já nasce com um nome do app: assim não sobra "Página1" para apagar
+    sheets: [{ properties: { title: 'Accounts' } }]
+  };
+
+  function loadScript_(src) {
+    return new Promise(function (resolve, reject) {
+      var el = document.createElement('script');
+      el.src = src; el.async = true;
+      el.onload = resolve;
+      el.onerror = function () { reject(new Error('Não consegui carregar ' + src)); };
+      document.head.appendChild(el);
+    });
+  }
+
+  /** Seletor de planilhas do Google (Picker): é ele que dá ao app acesso a uma planilha existente no modo mínimo. */
+  function pickSheet_() {
+    if (!cfg.apiKey) return Promise.reject(new Error('Falta a chave de API do seletor (apiKey em web/config.js).'));
+    return (window.gapi ? Promise.resolve() : loadScript_('https://apis.google.com/js/api.js')).then(function () {
+      return new Promise(function (resolve) { gapi.load('picker', resolve); });
+    }).then(function () {
+      return new Promise(function (resolve) {
+        var view = new google.picker.DocsView(google.picker.ViewId.SPREADSHEETS).setMode(google.picker.DocsViewMode.LIST);
+        new google.picker.PickerBuilder()
+          .addView(view)
+          .setOAuthToken(token.value)
+          .setDeveloperKey(cfg.apiKey)
+          .setAppId(cfg.projectNumber || '')
+          .setTitle('Escolha a planilha do Cacau')
+          .setCallback(function (data) {
+            if (data.action === google.picker.Action.PICKED) resolve(data.docs[0].id);
+            else if (data.action === google.picker.Action.CANCEL) resolve('');
+          })
+          .build().setVisible(true);
+      });
+    });
+  }
+
+  function useSheet_(id) {
+    try { localStorage.setItem(SHEET_KEY, id); } catch (e) { /* segue */ }
+    CacauGAS.PropertiesService.getUserProperties().setProperty('SPREADSHEET_ID', id);
+  }
+
+  /** Planilha nova na conta da pessoa, já com abas, categorias e a conta "Carteira" (como o onboarding do Apps Script). */
+  function createSheet_() {
+    return api_('', { method: 'POST', body: NEW_SHEET }).then(function (r) {
+      var id = r.json.spreadsheetId;
+      event_('planilha criada: ' + id);
+      useSheet_(id);
+      setWriteMode_(true); // planilha nova e vazia: gravar é seguro (e é preciso para semear)
+      meta = null;
+      return runCall_('seedSpreadsheet_', [], { setup: true }).then(function () {
+        event_('planilha semeada (abas, categorias, conta Carteira)');
+        return id;
+      });
+    });
+  }
+
   function showGate_(message, onDone) {
     var saved = '';
     try { saved = localStorage.getItem(SHEET_KEY) || ''; } catch (e) { /* segue */ }
@@ -4440,36 +4541,59 @@ var CacauBackend = (function () {
     if (gate) gate.remove();
     gate = document.createElement('div');
     gate.id = 'cacau-gate';
-    gate.setAttribute('style', 'position:fixed;inset:0;z-index:150;background:var(--bg,#FFF4DC);color:var(--text,#3b2314);display:flex;align-items:center;justify-content:center;padding:16px');
+    gate.setAttribute('style', 'position:fixed;inset:0;z-index:150;overflow:auto;background:var(--bg,#FFF4DC);color:var(--text,#3b2314);display:flex;align-items:center;justify-content:center;padding:16px');
+    var btn = 'font-size:16px;padding:12px';
     gate.innerHTML =
       '<div style="max-width:420px;width:100%;display:flex;flex-direction:column;gap:12px;font-family:system-ui,sans-serif">' +
       '<h2 style="margin:0">Cacau <small style="font-weight:normal;font-size:13px">(protótipo web)</small></h2>' +
       (message ? '<p style="margin:0;color:#b00">' + message + '</p>' : '') +
-      '<p style="margin:0;font-size:14px">Entre com a conta Google dona da planilha.</p>' +
-      '<label style="font-size:13px">Código (ID) ou link da planilha</label>' +
+      '<label style="font-size:13px">Permissão pedida ao Google</label>' +
+      '<select id="cacau-scope" style="font-size:15px;padding:8px">' +
+      '<option value="full"' + (scopeMode_() === 'full' ? ' selected' : '') + '>Completa: ver as planilhas da conta (Google avisa “não verificado”)</option>' +
+      '<option value="file"' + (scopeMode_() === 'file' ? ' selected' : '') + '>Mínima (drive.file): só planilhas criadas ou escolhidas aqui</option>' +
+      '</select>' +
+      '<button id="cacau-new" style="' + btn + '">Criar minha planilha</button>' +
+      '<button id="cacau-pick" style="' + btn + '">Escolher uma planilha existente</button>' +
+      '<label style="font-size:13px">ou informe o código (ID) ou link da planilha</label>' +
       '<input id="cacau-sheet" style="font-size:16px;padding:10px" placeholder="1AbC… ou link da planilha" value="' + saved.replace(/"/g, '&quot;') + '">' +
       '<label style="font-size:13px;display:flex;gap:8px;align-items:flex-start"><input type="checkbox" id="cacau-write"' + (writeMode_() ? ' checked' : '') + ' style="margin-top:3px"> <span><b>Modo gravação</b> (lançar, editar e apagar valem de verdade na planilha). Para testar, use uma <b>cópia</b> da planilha.</span></label>' +
-      '<button id="cacau-go" style="font-size:16px;padding:12px">Entrar com o Google</button>' +
+      '<button id="cacau-go" style="' + btn + '">Entrar com o Google</button>' +
       '<p id="cacau-gate-msg" style="margin:0;color:#b00;font-size:13px"></p>' +
       '</div>';
     document.body.appendChild(gate);
     var msg = gate.querySelector('#cacau-gate-msg');
+    var buttons = gate.querySelectorAll('button');
+    function busy_(on) { Array.prototype.forEach.call(buttons, function (b) { b.disabled = on; }); }
+    function done_() { gate.remove(); onDone(); gateDone(); }
+    function fail_(err) { busy_(false); msg.textContent = 'Não deu: ' + err.message; }
+    function login_() {
+      setScopeMode_(gate.querySelector('#cacau-scope').value);
+      msg.textContent = 'Abrindo o login do Google…';
+      busy_(true);
+      return requestToken_(everSignedIn ? '' : 'select_account');
+    }
+
     gate.querySelector('#cacau-go').onclick = function () {
       var raw = gate.querySelector('#cacau-sheet').value.trim();
       var m = raw.match(/\/d\/([a-zA-Z0-9_-]{20,})/);
       var id = m ? m[1] : raw;
       if (!/^[a-zA-Z0-9_-]{20,}$/.test(id)) { msg.textContent = 'Esse código/link de planilha não parece válido.'; return; }
       setWriteMode_(gate.querySelector('#cacau-write').checked);
-      msg.textContent = 'Abrindo o login do Google…';
-      requestToken_(everSignedIn ? '' : 'select_account').then(function () {
-        try { localStorage.setItem(SHEET_KEY, id); } catch (e) { /* segue */ }
-        CacauGAS.PropertiesService.getUserProperties().setProperty('SPREADSHEET_ID', id);
-        return fetchEmail_();
-      }).then(function () {
-        gate.remove();
-        onDone();
-        gateDone();
-      }).catch(function (err) { msg.textContent = 'Não deu: ' + err.message; });
+      login_().then(function () { useSheet_(id); return fetchEmail_(); }).then(done_).catch(fail_);
+    };
+    gate.querySelector('#cacau-new').onclick = function () {
+      login_().then(fetchEmail_).then(function () {
+        msg.textContent = 'Criando e preparando a planilha…';
+        return createSheet_();
+      }).then(done_).catch(fail_);
+    };
+    gate.querySelector('#cacau-pick').onclick = function () {
+      setWriteMode_(gate.querySelector('#cacau-write').checked);
+      login_().then(function () { msg.textContent = 'Abrindo o seletor de planilhas…'; return pickSheet_(); }).then(function (id) {
+        if (!id) { busy_(false); msg.textContent = 'Nenhuma planilha escolhida.'; return null; }
+        useSheet_(id);
+        return fetchEmail_().then(done_);
+      }).catch(fail_);
     };
   }
 
@@ -4481,7 +4605,7 @@ var CacauBackend = (function () {
       options.headers['Content-Type'] = 'application/json';
       options.body = JSON.stringify(init.body);
     }
-    return fetch(SHEETS + path, options).then(function (resp) {
+    return fetch((SHEETS + path).replace(/\/$/, ''), options).then(function (resp) {
       if (resp.status === 401 && !retried) {
         token.expiresAt = 0;
         event_('API devolveu 401: renovando');
@@ -4637,12 +4761,14 @@ var CacauBackend = (function () {
   }
 
   // ---------- chamada ----------
-  function runCall_(fnName, args) {
+  function runCall_(fnName, args, opts) {
+    opts = opts || {};
     var started = Date.now();
     var record = { at: started, fn: fnName, ms: 0, netMs: 0, api: 0, bytes: 0 };
     var apiBefore = stats.apiCalls;
-    var writing = writeMode_();
-    return ready.then(function () { return ensureToken_(); }).then(function () {
+    var writing = opts.setup || writeMode_();
+    // opts.setup: preparação feita pela própria tela de entrada, antes de liberar o app
+    return (opts.setup ? Promise.resolve() : ready).then(function () { return ensureToken_(); }).then(function () {
       var server = window.CacauServer;
       if (typeof server[fnName] !== 'function') throw new Error('Função "' + fnName + '" não existe no pacote web.');
       var id = currentSheetId_();
@@ -4693,5 +4819,5 @@ var CacauBackend = (function () {
   }
   document.addEventListener('DOMContentLoaded', start);
 
-  return { call: call, signOut: signOut, stats: stats };
+  return { call: call, signOut: signOut, stats: stats, createSheet: createSheet_ };
 })();
