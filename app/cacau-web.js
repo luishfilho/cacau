@@ -4281,6 +4281,8 @@ var CacauBackend = (function () {
   var META_TTL_MS = 5 * 60 * 1000;
   var SILENT_TIMEOUT_MS = 8000;
   var TOKEN_MARGIN_MS = 60 * 1000;
+  var NATIVE_TOKEN_MS = 30 * 60 * 1000; // o app não informa a validade; o Google dá ~1 h, então 30 min é conservador
+  var NATIVE_ASK_TIMEOUT_MS = 3 * 60 * 1000;
   var SHEETS = 'https://sheets.googleapis.com/v4/spreadsheets/';
   var TOKEN_KEY = 'cacau-web-token';
   var WRITE_KEY = 'cacau-web-write';
@@ -4298,7 +4300,13 @@ var CacauBackend = (function () {
   var stats = { apiCalls: 0, calls: [], events: [] };
   var queue = Promise.resolve();
 
+  /** Dentro do app Android o login é do próprio app (Google bloqueia login em WebView): ele entrega o token pela ponte. */
+  function nativeLogin_() {
+    return !!(window.FinancasApp && typeof window.FinancasApp.requestWebToken === 'function');
+  }
+
   function scopeMode_() {
+    if (nativeLogin_()) return 'file';
     try { return localStorage.getItem(SCOPE_KEY) === 'full' ? 'full' : 'file'; } catch (e) { return 'file'; }
   }
   /** Trocar de permissão invalida o token atual (foi emitido para outro escopo). */
@@ -4312,10 +4320,10 @@ var CacauBackend = (function () {
   }
 
   function writeMode_() {
-    try { return localStorage.getItem(WRITE_KEY) === '1'; } catch (e) { return false; }
+    try { return localStorage.getItem(WRITE_KEY) !== '0'; } catch (e) { return true; }
   }
   function setWriteMode_(on) {
-    try { if (on) localStorage.setItem(WRITE_KEY, '1'); else localStorage.removeItem(WRITE_KEY); } catch (e) { /* segue */ }
+    try { localStorage.setItem(WRITE_KEY, on ? '1' : '0'); } catch (e) { /* segue */ }
   }
 
   var ready = new Promise(function (resolve) { gateDone = resolve; });
@@ -4420,7 +4428,29 @@ var CacauBackend = (function () {
     });
   }
 
+  /** Pede o token ao app Android (ponte window.FinancasApp); ele mostra o consentimento do Google se precisar. */
+  function requestNativeToken_() {
+    return new Promise(function (resolve, reject) {
+      var timer = setTimeout(function () {
+        window.__cacauNativeToken = null;
+        reject(new Error('o app não respondeu ao pedido de login'));
+      }, NATIVE_ASK_TIMEOUT_MS);
+      window.__cacauNativeToken = function (ok, value) {
+        clearTimeout(timer);
+        window.__cacauNativeToken = null;
+        if (!ok) { event_('login pelo app recusado: ' + value); return reject(new Error(String(value || 'login recusado'))); }
+        token = { value: String(value), expiresAt: Date.now() + NATIVE_TOKEN_MS - TOKEN_MARGIN_MS, grantedAt: Date.now(), mode: 'file' };
+        everSignedIn = true;
+        saveToken_();
+        event_('token novo entregue pelo app Android (assumido por 30 min)');
+        resolve();
+      };
+      window.FinancasApp.requestWebToken();
+    });
+  }
+
   function requestToken_(prompt) {
+    if (nativeLogin_()) return requestNativeToken_();
     return initClient_().then(function () {
       return new Promise(function (resolve, reject) {
         pendingToken = { resolve: resolve, reject: reject };
@@ -4446,6 +4476,13 @@ var CacauBackend = (function () {
   /** Garante um token. Renovação silenciosa primeiro; se não der, pede um clique na tela. */
   function ensureToken_() {
     if (tokenValid_()) return Promise.resolve();
+    if (nativeLogin_() && everSignedIn) {
+      event_('token venceu: pedindo outro ao app');
+      return requestNativeToken_().catch(function (err) {
+        event_('renovação pelo app falhou: ' + err.message);
+        return askUser_('Sua sessão com o Google expirou. Entre de novo para continuar.');
+      });
+    }
     if (everSignedIn) {
       event_('token venceu: tentando renovar sem pedir nada');
       var timer;
@@ -4478,6 +4515,7 @@ var CacauBackend = (function () {
   }
 
   function signOut() {
+    if (nativeLogin_() && typeof window.FinancasApp.signOut === 'function') { window.FinancasApp.signOut(); return; }
     try { if (token.value && window.google) google.accounts.oauth2.revoke(token.value, function () {}); } catch (e) { /* segue */ }
     token = { value: '', expiresAt: 0, grantedAt: 0 };
     everSignedIn = false;
@@ -4558,8 +4596,8 @@ var CacauBackend = (function () {
       '<div style="max-width:420px;width:100%;display:flex;flex-direction:column;gap:12px;font-family:system-ui,sans-serif">' +
       '<h2 style="margin:0">Cacau <small style="font-weight:normal;font-size:13px">(protótipo web)</small></h2>' +
       (message ? '<p style="margin:0;color:#b00">' + message + '</p>' : '') +
-      '<label style="font-size:13px">Permissão pedida ao Google</label>' +
-      '<select id="cacau-scope" style="font-size:15px;padding:8px">' +
+      (nativeLogin_() ? '' : '<label style="font-size:13px">Permissão pedida ao Google</label>') +
+      '<select id="cacau-scope" style="font-size:15px;padding:8px' + (nativeLogin_() ? ';display:none' : '') + '">' +
       '<option value="full"' + (scopeMode_() === 'full' ? ' selected' : '') + '>Completa: ver as planilhas da conta (Google avisa “não verificado”)</option>' +
       '<option value="file"' + (scopeMode_() === 'file' ? ' selected' : '') + '>Mínima (drive.file): só planilhas criadas ou escolhidas aqui</option>' +
       '</select>' +
@@ -4568,7 +4606,7 @@ var CacauBackend = (function () {
       '<label style="font-size:13px">ou informe o código (ID) ou link da planilha</label>' +
       '<input id="cacau-sheet" style="font-size:16px;padding:10px" placeholder="1AbC… ou link da planilha" value="' + saved.replace(/"/g, '&quot;') + '">' +
       '<label style="font-size:13px;display:flex;gap:8px;align-items:flex-start"><input type="checkbox" id="cacau-write"' + (writeMode_() ? ' checked' : '') + ' style="margin-top:3px"> <span><b>Modo gravação</b> (lançar, editar e apagar valem de verdade na planilha). Para testar, use uma <b>cópia</b> da planilha.</span></label>' +
-      '<button id="cacau-go" style="' + btn + '">Entrar com o Google</button>' +
+      '<button id="cacau-go" style="' + btn + '">' + (nativeLogin_() ? 'Entrar' : 'Entrar com o Google') + '</button>' +
       '<p id="cacau-gate-msg" style="margin:0;color:#b00;font-size:13px"></p>' +
       '</div>';
     document.body.appendChild(gate);
