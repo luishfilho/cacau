@@ -4256,9 +4256,9 @@ return {
  *  3. Mede tudo (tempo, chamadas à API, validade do token) num painel de diagnóstico.
  *
  * Duas permissões (escolhidas na tela de entrada, guardadas no navegador):
- *   full  (padrão) escopo "spreadsheets": enxerga qualquer planilha da conta (sensível: exige verificação do Google)
- *   file  escopo "drive.file": só enxerga planilhas que o próprio app criou ou que a pessoa escolheu
- *         no seletor do Google (Picker). Experimento: ainda não decidido qual das duas fica.
+ *   file  (padrão) escopo "drive.file": só enxerga planilhas que o próprio app criou ou que a pessoa escolheu
+ *         no seletor do Google (Picker). Decidido: a mínima é a padrão.
+ *   full  escopo "spreadsheets": enxerga qualquer planilha da conta (sensível: exige verificação do Google)
  *
  * Duas modalidades (interruptor "modo gravação", guardado no navegador):
  *   leitura   (padrão) gravações do servidor são recusadas; leituras que "arrumam" a planilha
@@ -4299,12 +4299,12 @@ var CacauBackend = (function () {
   var queue = Promise.resolve();
 
   function scopeMode_() {
-    try { return localStorage.getItem(SCOPE_KEY) === 'file' ? 'file' : 'full'; } catch (e) { return 'full'; }
+    try { return localStorage.getItem(SCOPE_KEY) === 'full' ? 'full' : 'file'; } catch (e) { return 'file'; }
   }
   /** Trocar de permissão invalida o token atual (foi emitido para outro escopo). */
   function setScopeMode_(mode) {
     if (mode === scopeMode_()) return;
-    try { if (mode === 'file') localStorage.setItem(SCOPE_KEY, 'file'); else localStorage.removeItem(SCOPE_KEY); } catch (e) { /* segue */ }
+    try { if (mode === 'full') localStorage.setItem(SCOPE_KEY, 'full'); else localStorage.removeItem(SCOPE_KEY); } catch (e) { /* segue */ }
     tokenClient = null;
     token = { value: '', expiresAt: 0, grantedAt: 0 };
     everSignedIn = false;
@@ -4436,7 +4436,7 @@ var CacauBackend = (function () {
   function restoreToken_() {
     try {
       var saved = JSON.parse(sessionStorage.getItem(TOKEN_KEY) || 'null');
-      if (saved && saved.value && Date.now() < saved.expiresAt && (saved.mode || 'full') === scopeMode_()) { token = saved; everSignedIn = true; return true; }
+      if (saved && saved.value && Date.now() < saved.expiresAt && (saved.mode || 'file') === scopeMode_()) { token = saved; everSignedIn = true; return true; }
     } catch (e) { /* segue */ }
     return false;
   }
