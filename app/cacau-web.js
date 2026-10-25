@@ -4277,7 +4277,7 @@ var CacauBackend = (function () {
   };
   var SCOPE_KEY = 'cacau-web-scope';
   var SHEET_KEY = 'cacau-web-sheet-id';
-  var DIAG_KEY = 'cacau-web-diag-off';
+  var DIAG_KEY = 'cacau-web-diag-hidden';
   var META_TTL_MS = 5 * 60 * 1000;
   var SILENT_TIMEOUT_MS = 8000;
   var TOKEN_MARGIN_MS = 60 * 1000;
@@ -4341,30 +4341,38 @@ var CacauBackend = (function () {
     stats.events.slice(0, 5).forEach(function (e) { lines.push(hhmmss_(e.at) + ' ' + e.message); });
     box.querySelector('.d-body').innerHTML = lines.join('<br>');
   }
+  /** Painel de diagnóstico + um botão discreto (sempre presente) que mostra/oculta o painel; a escolha fica guardada. */
   function mountDiag_() {
-    var off = false;
-    try {
-      if (/[?&]diag=1/.test(location.search)) localStorage.removeItem(DIAG_KEY);
-      off = localStorage.getItem(DIAG_KEY) === '1';
-    } catch (e) { /* segue */ }
+    var hidden = false;
+    try { hidden = localStorage.getItem(DIAG_KEY) === '1'; } catch (e) { /* segue */ }
     var box = document.createElement('div');
     box.id = 'cacau-diag';
-    box.setAttribute('style', 'position:fixed;left:8px;bottom:8px;z-index:200;max-width:92vw;background:rgba(0,0,0,.78);color:#fff;font:11px/1.35 monospace;padding:6px 8px;border-radius:8px');
+    box.setAttribute('style', 'position:fixed;left:8px;bottom:40px;z-index:200;max-width:92vw;background:rgba(0,0,0,.78);color:#fff;font:11px/1.35 monospace;padding:6px 8px;border-radius:8px');
     box.innerHTML = '<div class="d-body"></div><a href="#" class="d-x" style="color:#9cf">ocultar</a> · <a href="#" class="d-mode" style="color:#9cf">trocar modo</a> · <a href="#" class="d-out" style="color:#9cf">sair da conta</a>';
+    var toggle = document.createElement('button');
+    toggle.id = 'cacau-diag-toggle';
+    toggle.type = 'button';
+    toggle.title = 'Mostrar/ocultar o diagnóstico';
+    toggle.setAttribute('aria-label', 'Mostrar ou ocultar o diagnóstico');
+    toggle.textContent = 'i';
+    toggle.setAttribute('style', 'position:fixed;left:8px;bottom:8px;z-index:201;width:26px;height:26px;padding:0;border-radius:50%;border:1px solid rgba(0,0,0,.25);background:rgba(0,0,0,.35);color:#fff;font:italic 600 14px/1 Georgia,serif;opacity:.5;cursor:pointer');
+    function show_(on) {
+      if (on) { if (!box.parentNode) document.body.appendChild(box); renderDiag_(); } else if (box.parentNode) box.parentNode.removeChild(box);
+      toggle.style.opacity = on ? '.9' : '.5';
+      try { if (on) localStorage.removeItem(DIAG_KEY); else localStorage.setItem(DIAG_KEY, '1'); } catch (e) { /* segue */ }
+    }
+    toggle.onclick = function () { show_(!box.parentNode); };
     box.querySelector('.d-mode').onclick = function (e) {
       e.preventDefault();
       if (!writeMode_() && !confirm('Ligar o MODO GRAVAÇÃO? Lançamentos, edições e exclusões passam a valer na planilha escolhida. Use uma CÓPIA para testar.')) return;
       setWriteMode_(!writeMode_());
       location.reload();
     };
-    box.querySelector('.d-x').onclick = function (e) {
-      e.preventDefault(); box.remove();
-      try { localStorage.setItem(DIAG_KEY, '1'); } catch (err) { /* segue */ }
-    };
+    box.querySelector('.d-x').onclick = function (e) { e.preventDefault(); show_(false); };
     box.querySelector('.d-out').onclick = function (e) { e.preventDefault(); signOut(); };
-    if (!off) document.body.appendChild(box);
+    document.body.appendChild(toggle);
+    show_(!hidden);
     setInterval(renderDiag_, 5000);
-    renderDiag_();
   }
 
   // ---------- login ----------
