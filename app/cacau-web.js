@@ -4395,6 +4395,9 @@ var CacauBackend = (function () {
       tokenClient = google.accounts.oauth2.initTokenClient({
         client_id: cfg.clientId,
         scope: SCOPES[tokenClientMode],
+        // sem isto o Google soma o que a pessoa já autorizou antes (ex: a permissão completa) e o
+        // experimento da permissão mínima não provaria nada
+        include_granted_scopes: false,
         callback: function (resp) {
           var p = pendingToken; pendingToken = null;
           if (resp.error) {
