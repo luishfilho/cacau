@@ -13,13 +13,16 @@ window.CACAU_WEB_CONFIG = {
  * de cada chamada e este arquivo expõe esse snapshot com a mesma interface do
  * SpreadsheetApp: o código do servidor continua igual, só lê da memória.
  *
- * Etapa 1 (protótipo): somente leitura. Qualquer gravação numa aba real lança erro; abas
- * que não existem na planilha viram abas "efêmeras" (só em memória, nunca enviadas).
+ * Três modos (setSnapshot options.mode):
+ *   'readonly'  gravar numa aba real lança erro; aba inexistente vira "efêmera" (só memória)
+ *   'discard'   gravações valem só na cópia em memória (descartada na próxima chamada)
+ *   'write'     gravações valem na memória E ficam registradas em pendingOps(), para o backend
+ *               enviar à Sheets API (sheets-writer.js traduz)
  */
 var CacauGAS = (function () {
   var SCRIPT_TZ = 'America/Sao_Paulo'; // mesmo timeZone do appsscript.json do beta
   var SERIAL_EPOCH_MS = Date.UTC(1899, 11, 30);
-  var READ_ONLY_MESSAGE = 'Protótipo somente leitura: gravar na planilha ainda não está habilitado (etapa 2).';
+  var READ_ONLY_MESSAGE = 'Modo somente leitura: para gravar, ative o "modo gravação" (use uma cópia da planilha para testar).';
 
   // ---------- datas ----------
   var dtfCache = {};
@@ -85,6 +88,14 @@ var CacauGAS = (function () {
     return new Date(instant);
   }
 
+  /** Inverso de serialToDate: Date -> número de série do Sheets no fuso da planilha. */
+  function dateToSerial(date, tz) {
+    var f = fieldsAt_(date.getTime(), tz);
+    var millis = ((date.getTime() % 1000) + 1000) % 1000;
+    var wall = Date.UTC(f.year, f.month - 1, f.day, f.hour, f.minute, f.second) + millis;
+    return (wall - SERIAL_EPOCH_MS) / 86400000;
+  }
+
   function uuid_() {
     if (typeof crypto !== 'undefined' && crypto.randomUUID) return crypto.randomUUID();
     return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function (c) {
@@ -133,7 +144,7 @@ var CacauGAS = (function () {
   var Logger = { log: function () { if (typeof console !== 'undefined') console.log.apply(console, arguments); } };
 
   // ---------- planilha em memória ----------
-  var ctx = { current: null, readOnly: true, ops: [] };
+  var ctx = { current: null, mode: 'readonly', ops: [] };
 
   /** snapshot = { id, url, tz, sheets: [{ title, rowCount, columnCount, values: [[...]] }] } */
   function setSnapshot(snapshot, options) {
@@ -145,14 +156,17 @@ var CacauGAS = (function () {
         rows: spec.values.map(function (row) { return row.slice(); }),
         maxRows: Math.max(spec.rowCount || 0, spec.values.length),
         maxCols: Math.max(spec.columnCount || 0, widest_(spec.values)),
-        ephemeral: false
+        ephemeral: false,
+        created: false,
+        source: spec.values // linhas originais (não são mexidas): base da checagem de conflito
       };
       order.push(spec.title);
     });
+    order.forEach(function (title) { sheets[title].origLastRow = lastRowOf_(sheets[title]); });
     ctx.current = { id: snapshot.id, url: snapshot.url || '', tz: snapshot.tz || SCRIPT_TZ, sheets: sheets, order: order };
-    // discardWrites: leituras do servidor que "arrumam" a planilha (ex: criar o orçamento
+    // 'discard': leituras do servidor que "arrumam" a planilha (ex: criar o orçamento
     // "Sem orçamento") mexem só na cópia em memória, que é descartada na próxima chamada.
-    ctx.readOnly = !(options && (options.writable || options.discardWrites));
+    ctx.mode = (options && options.mode) || 'readonly';
     ctx.ops = [];
   }
 
@@ -169,7 +183,7 @@ var CacauGAS = (function () {
 
   function guard_(sheet) {
     if (sheet.ephemeral) return;
-    if (ctx.readOnly) throw new Error(READ_ONLY_MESSAGE);
+    if (ctx.mode === 'readonly') throw new Error(READ_ONLY_MESSAGE);
   }
 
   function isEmptyCell_(v) { return v === '' || v === undefined || v === null; }
@@ -180,6 +194,18 @@ var CacauGAS = (function () {
       for (var j = 0; j < row.length; j++) if (!isEmptyCell_(row[j])) return i + 1;
     }
     return 0;
+  }
+
+  function writeCells_(s, row, col, values) {
+    for (var i = 0; i < values.length; i++) {
+      while (s.rows.length < row - 1 + i + 1) s.rows.push([]);
+      var target = s.rows[row - 1 + i];
+      for (var j = 0; j < values[i].length; j++) {
+        while (target.length < col - 1 + j) target.push('');
+        target[col - 1 + j] = values[i][j];
+      }
+    }
+    if (row - 1 + values.length > s.maxRows) s.maxRows = row - 1 + values.length;
   }
 
   function sheetApi_(name) {
@@ -209,16 +235,11 @@ var CacauGAS = (function () {
         getValue: function () { return this.getValues()[0][0]; },
         setValues: function (values) {
           var s = raw(); guard_(s);
-          for (var i = 0; i < values.length; i++) {
-            while (s.rows.length < row - 1 + i + 1) s.rows.push([]);
-            var target = s.rows[row - 1 + i];
-            for (var j = 0; j < values[i].length; j++) {
-              while (target.length < col - 1 + j) target.push('');
-              target[col - 1 + j] = values[i][j];
-            }
-          }
-          if (row - 1 + values.length > s.maxRows) s.maxRows = row - 1 + values.length;
-          ctx.ops.push({ op: 'setValues', sheet: name, row: row, col: col, values: values });
+          writeCells_(s, row, col, values);
+          // append: só linhas novas, depois do fim lido (o backend usa "acrescentar" da API,
+          // que não sobrescreve linhas que outro aparelho tenha adicionado nesse meio tempo)
+          ctx.ops.push({ op: 'setValues', sheet: name, row: row, col: col, values: values,
+            append: !s.created && !s.ephemeral && row > s.origLastRow });
           return this;
         },
         clearContent: function () {
@@ -246,8 +267,8 @@ var CacauGAS = (function () {
       getRange: rangeApi,
       appendRow: function (values) {
         var s = raw(); guard_(s);
-        var row = lastRowOf_(s) + 1;
-        rangeApi(row, 1, 1, values.length).setValues([values]);
+        writeCells_(s, lastRowOf_(s) + 1, 1, [values]);
+        ctx.ops.push({ op: 'appendRow', sheet: name, values: values, created: s.created });
         return this;
       },
       deleteRow: function (n) {
@@ -285,14 +306,17 @@ var CacauGAS = (function () {
     insertSheet: function (name) {
       var cur = current_();
       if (cur.sheets[name]) throw new Error('Já existe uma aba chamada "' + name + '".');
-      cur.sheets[name] = { name: name, rows: [], maxRows: 1000, maxCols: 26, ephemeral: true };
+      var real = ctx.mode === 'write';
+      cur.sheets[name] = { name: name, rows: [], maxRows: 1000, maxCols: 26, ephemeral: !real, created: real, origLastRow: 0, source: [] };
       cur.order.push(name);
+      if (real) ctx.ops.push({ op: 'insertSheet', sheet: name });
       return sheetApi_(name);
     },
     deleteSheet: function (sheet) {
       var cur = current_();
       var name = sheet.getName();
       guard_(cur.sheets[name]);
+      if (ctx.mode === 'write' && !cur.sheets[name].ephemeral) ctx.ops.push({ op: 'deleteSheet', sheet: name });
       delete cur.sheets[name];
       cur.order = cur.order.filter(function (n) { return n !== name; });
     }
@@ -310,9 +334,167 @@ var CacauGAS = (function () {
   return {
     Utilities: Utilities, Session: Session, LockService: LockService, PropertiesService: PropertiesService,
     Logger: Logger, SpreadsheetApp: SpreadsheetApp,
-    setSnapshot: setSnapshot, setEmail: setEmail, useStorage: useStorage, serialToDate: serialToDate,
+    setSnapshot: setSnapshot, setEmail: setEmail, useStorage: useStorage, serialToDate: serialToDate, dateToSerial: dateToSerial,
+    /** Coluna (1-based) das linhas ORIGINAIS lidas (sem o cabeçalho): base da checagem de conflito. */
+    originalColumn: function (sheetName, col) {
+      var s = current_().sheets[sheetName];
+      if (!s || s.created) return [];
+      return s.source.slice(1, s.origLastRow).map(function (r) { var v = r[col - 1]; return v === undefined ? '' : v; });
+    },
+    mode: function () { return ctx.mode; },
     formatDate: formatDate, scriptTimeZone: SCRIPT_TZ, pendingOps: function () { return ctx.ops.slice(); },
     READ_ONLY_MESSAGE: READ_ONLY_MESSAGE
+  };
+})();
+
+/**
+ * Traduz as operações que o servidor fez no CacauGAS (pendingOps) em chamadas da Sheets API.
+ *
+ * Duas etapas, as duas puras (sem rede), para dar para testar:
+ *   plan(ops)                        -> passos em ordem (operações vizinhas do mesmo tipo se juntam)
+ *   request(step, ids, tz, toSerial) -> { path, method, body } de um passo
+ * "ids" é { nomeDaAba: sheetId numérico }; só precisa conter as abas que o passo usa.
+ *
+ * Tipos de passo:
+ *   structure  um spreadsheets:batchUpdate (criar/apagar aba, apagar linha, inserir coluna,
+ *              congelar linha, formato de texto). As requests vão na ordem em que o servidor
+ *              as fez, então os índices de linha se comportam como no Apps Script.
+ *   values     um values:batchUpdate (vários setValues)
+ *   append     um values:append (acrescentar linhas; o Sheets escolhe a linha, então não
+ *              sobrescreve o que outro aparelho tenha acrescentado)
+ *   clear      um values:batchClear
+ */
+var CacauWriter = (function () {
+  function colLetter_(n) {
+    var s = '';
+    while (n > 0) { var m = (n - 1) % 26; s = String.fromCharCode(65 + m) + s; n = Math.floor((n - 1) / 26); }
+    return s;
+  }
+
+  function quoteSheet_(name) { return "'" + String(name).replace(/'/g, "''") + "'"; }
+
+  /** A1 de um bloco: 'Aba'!A2:C4 */
+  function a1_(sheet, row, col, numRows, numCols) {
+    return quoteSheet_(sheet) + '!' + colLetter_(col) + row + ':' + colLetter_(col + numCols - 1) + (row + numRows - 1);
+  }
+
+  function kindOf_(op) {
+    switch (op.op) {
+      case 'insertSheet': case 'deleteSheet': case 'deleteRow': case 'insertColumnsAfter':
+      case 'setFrozenRows': case 'setNumberFormat':
+        return 'structure';
+      case 'clearContent': return 'clear';
+      case 'appendRow': return 'append';
+      case 'setValues': return op.append ? 'append' : 'values';
+    }
+    throw new Error('Operação desconhecida: ' + op.op);
+  }
+
+  function plan(ops) {
+    var steps = [];
+    ops.forEach(function (op) {
+      var kind = kindOf_(op);
+      var last = steps[steps.length - 1];
+      // aba criada no próprio passo ainda não tem sheetId: quem a usar vai para o passo seguinte
+      var usesNewSheet = kind === 'structure' && op.op !== 'insertSheet' && last && last.kind === 'structure' &&
+        last.ops.some(function (o) { return o.op === 'insertSheet' && o.sheet === op.sheet; });
+      // appends nunca se juntam: cada um é uma chamada, na ordem
+      if (last && last.kind === kind && kind !== 'append' && !usesNewSheet) last.ops.push(op);
+      else steps.push({ kind: kind, ops: [op] });
+    });
+    return steps;
+  }
+
+  /** Nomes de abas (existentes na planilha) que o passo precisa traduzir para sheetId. */
+  function sheetsNeedingIds(step) {
+    if (step.kind !== 'structure') return [];
+    var names = {};
+    step.ops.forEach(function (op) { if (op.op !== 'insertSheet') names[op.sheet] = true; });
+    return Object.keys(names);
+  }
+
+  function cell_(value, tz, toSerial) {
+    if (value === null || value === undefined) return '';
+    if (value instanceof Date) return toSerial(value, tz);
+    return value;
+  }
+  function matrix_(values, tz, toSerial) {
+    return values.map(function (row) { return row.map(function (v) { return cell_(v, tz, toSerial); }); });
+  }
+
+  function structureRequest_(op, ids) {
+    var id = ids[op.sheet];
+    if (op.op !== 'insertSheet' && id === undefined) throw new Error('Não achei o código da aba "' + op.sheet + '".');
+    switch (op.op) {
+      case 'insertSheet': return { addSheet: { properties: { title: op.sheet } } };
+      case 'deleteSheet': return { deleteSheet: { sheetId: id } };
+      case 'deleteRow':
+        return { deleteDimension: { range: { sheetId: id, dimension: 'ROWS', startIndex: op.row - 1, endIndex: op.row } } };
+      case 'insertColumnsAfter':
+        return { insertDimension: { range: { sheetId: id, dimension: 'COLUMNS', startIndex: op.position, endIndex: op.position + op.count }, inheritFromBefore: op.position > 0 } };
+      case 'setFrozenRows':
+        return { updateSheetProperties: { properties: { sheetId: id, gridProperties: { frozenRowCount: op.count } }, fields: 'gridProperties.frozenRowCount' } };
+      case 'setNumberFormat':
+        return { repeatCell: {
+          range: { sheetId: id, startRowIndex: op.row - 1, endRowIndex: op.row - 1 + op.numRows, startColumnIndex: op.col - 1, endColumnIndex: op.col - 1 + op.numCols },
+          cell: { userEnteredFormat: { numberFormat: op.format === '@' ? { type: 'TEXT' } : { type: 'NUMBER', pattern: op.format } } },
+          fields: 'userEnteredFormat.numberFormat'
+        } };
+    }
+    throw new Error('Operação de estrutura desconhecida: ' + op.op);
+  }
+
+  function request(step, ids, tz, toSerial) {
+    var base = '';
+    switch (step.kind) {
+      case 'structure':
+        return { method: 'POST', path: base + ':batchUpdate', body: { requests: step.ops.map(function (op) { return structureRequest_(op, ids); }) } };
+      case 'values':
+        return { method: 'POST', path: '/values:batchUpdate', body: {
+          valueInputOption: 'USER_ENTERED',
+          data: step.ops.map(function (op) {
+            var vals = matrix_(op.values, tz, toSerial);
+            var width = vals.reduce(function (w, r) { return Math.max(w, r.length); }, 1);
+            return { range: a1_(op.sheet, op.row, op.col, vals.length, width), majorDimension: 'ROWS', values: vals };
+          })
+        } };
+      case 'append': {
+        var op = step.ops[0];
+        var rows = op.op === 'appendRow' ? [op.values] : op.values;
+        var vals = matrix_(rows, tz, toSerial);
+        return {
+          method: 'POST',
+          path: '/values/' + encodeURIComponent(quoteSheet_(op.sheet) + '!A1') + ':append?valueInputOption=USER_ENTERED&insertDataOption=INSERT_ROWS',
+          body: { majorDimension: 'ROWS', values: vals }
+        };
+      }
+      case 'clear':
+        return { method: 'POST', path: '/values:batchClear', body: { ranges: step.ops.map(function (op) { return a1_(op.sheet, op.row, op.col, op.numRows, op.numCols); }) } };
+    }
+    throw new Error('Passo desconhecido: ' + step.kind);
+  }
+
+  /**
+   * Abas e colunas que precisam ser conferidas antes de gravar: qualquer aba existente em que o
+   * servidor mexeu em linhas que já existiam (editar, apagar, limpar). Acrescentar não precisa.
+   */
+  function sheetsToVerify(ops) {
+    var names = {};
+    ops.forEach(function (op) {
+      if (op.op === 'deleteRow' || op.op === 'clearContent' || (op.op === 'setValues' && !op.append)) names[op.sheet] = true;
+    });
+    // abas criadas nesta mesma chamada não existiam: nada a conferir
+    ops.forEach(function (op) { if (op.op === 'insertSheet') delete names[op.sheet]; });
+    return Object.keys(names);
+  }
+
+  function createsSheets(ops) {
+    return ops.some(function (op) { return op.op === 'insertSheet' || op.op === 'deleteSheet'; });
+  }
+
+  return {
+    plan: plan, request: request, sheetsNeedingIds: sheetsNeedingIds, sheetsToVerify: sheetsToVerify,
+    createsSheets: createsSheets, colLetter: colLetter_, a1: a1_
   };
 })();
 
@@ -4055,8 +4237,14 @@ return {
  *     expõe como SpreadsheetApp) e roda a MESMA função do servidor (CacauServer) em cima dele.
  *  3. Mede tudo (tempo, chamadas à API, validade do token) num painel de diagnóstico.
  *
- * Somente leitura nesta etapa. Quem usa isto é o run() do cliente (JavaScript.html), que só
- * delega para cá quando window.CacauBackend existe.
+ * Duas modalidades (interruptor "modo gravação", guardado no navegador):
+ *   leitura   (padrão) gravações do servidor são recusadas; leituras que "arrumam" a planilha
+ *             valem só na memória
+ *   gravação  o que o servidor fez na cópia em memória (CacauGAS.pendingOps) é enviado à Sheets
+ *             API por CacauWriter, depois de conferir que a planilha não mudou em outro lugar
+ * As chamadas rodam uma de cada vez (fila), como o LockService fazia no Apps Script.
+ * Quem usa isto é o run() do cliente (JavaScript.html), que só delega para cá quando
+ * window.CacauBackend existe.
  */
 var CacauBackend = (function () {
   var cfg = window.CACAU_WEB_CONFIG || {};
@@ -4068,6 +4256,8 @@ var CacauBackend = (function () {
   var TOKEN_MARGIN_MS = 60 * 1000;
   var SHEETS = 'https://sheets.googleapis.com/v4/spreadsheets/';
   var TOKEN_KEY = 'cacau-web-token';
+  var WRITE_KEY = 'cacau-web-write';
+  var CONFLICT_MESSAGE = 'A planilha foi alterada em outro lugar (outro aparelho ou aba) enquanto você editava. Nada foi gravado: recarregue e tente de novo.';
 
   var tokenClient = null;
   var pendingToken = null; // { resolve, reject }
@@ -4078,6 +4268,14 @@ var CacauBackend = (function () {
   var userGate = null;     // promessa que só resolve quando a pessoa clica em "Entrar" de novo
   var gateDone = null;
   var stats = { apiCalls: 0, calls: [], events: [] };
+  var queue = Promise.resolve();
+
+  function writeMode_() {
+    try { return localStorage.getItem(WRITE_KEY) === '1'; } catch (e) { return false; }
+  }
+  function setWriteMode_(on) {
+    try { if (on) localStorage.setItem(WRITE_KEY, '1'); else localStorage.removeItem(WRITE_KEY); } catch (e) { /* segue */ }
+  }
 
   var ready = new Promise(function (resolve) { gateDone = resolve; });
 
@@ -4095,9 +4293,9 @@ var CacauBackend = (function () {
     var box = document.getElementById('cacau-diag');
     if (!box) return;
     var left = token.expiresAt ? Math.max(0, Math.round((token.expiresAt + TOKEN_MARGIN_MS - Date.now()) / 1000)) : 0;
-    var lines = ['<b>Diagnóstico (protótipo)</b> — token vale mais ' + left + ' s · ' + stats.apiCalls + ' chamadas à API'];
+    var lines = ['<b>Diagnóstico (protótipo)</b> — modo ' + (writeMode_() ? '<b style="color:#fc6">GRAVAÇÃO</b>' : 'leitura') + ' · token vale mais ' + left + ' s · ' + stats.apiCalls + ' chamadas à API'];
     stats.calls.slice(0, 5).forEach(function (c) {
-      lines.push(hhmmss_(c.at) + ' ' + c.fn + ' · ' + c.ms + ' ms (rede ' + c.netMs + ' ms, ' + c.api + ' req, ' + Math.round(c.bytes / 1024) + ' KB)' + (c.error ? ' · ERRO ' + c.error : ''));
+      lines.push(hhmmss_(c.at) + ' ' + c.fn + ' · ' + c.ms + ' ms (rede ' + c.netMs + ' ms, ' + c.api + ' req, ' + Math.round(c.bytes / 1024) + ' KB)' + (c.writes ? ' · ' + c.writes + ' gravação(ões)' : '') + (c.error ? ' · ERRO ' + c.error : ''));
     });
     stats.events.slice(0, 5).forEach(function (e) { lines.push(hhmmss_(e.at) + ' ' + e.message); });
     box.querySelector('.d-body').innerHTML = lines.join('<br>');
@@ -4111,7 +4309,13 @@ var CacauBackend = (function () {
     var box = document.createElement('div');
     box.id = 'cacau-diag';
     box.setAttribute('style', 'position:fixed;left:8px;bottom:8px;z-index:200;max-width:92vw;background:rgba(0,0,0,.78);color:#fff;font:11px/1.35 monospace;padding:6px 8px;border-radius:8px');
-    box.innerHTML = '<div class="d-body"></div><a href="#" class="d-x" style="color:#9cf">ocultar</a> · <a href="#" class="d-out" style="color:#9cf">sair da conta</a>';
+    box.innerHTML = '<div class="d-body"></div><a href="#" class="d-x" style="color:#9cf">ocultar</a> · <a href="#" class="d-mode" style="color:#9cf">trocar modo</a> · <a href="#" class="d-out" style="color:#9cf">sair da conta</a>';
+    box.querySelector('.d-mode').onclick = function (e) {
+      e.preventDefault();
+      if (!writeMode_() && !confirm('Ligar o MODO GRAVAÇÃO? Lançamentos, edições e exclusões passam a valer na planilha escolhida. Use uma CÓPIA para testar.')) return;
+      setWriteMode_(!writeMode_());
+      location.reload();
+    };
     box.querySelector('.d-x').onclick = function (e) {
       e.preventDefault(); box.remove();
       try { localStorage.setItem(DIAG_KEY, '1'); } catch (err) { /* segue */ }
@@ -4239,11 +4443,12 @@ var CacauBackend = (function () {
     gate.setAttribute('style', 'position:fixed;inset:0;z-index:150;background:var(--bg,#FFF4DC);color:var(--text,#3b2314);display:flex;align-items:center;justify-content:center;padding:16px');
     gate.innerHTML =
       '<div style="max-width:420px;width:100%;display:flex;flex-direction:column;gap:12px;font-family:system-ui,sans-serif">' +
-      '<h2 style="margin:0">Cacau <small style="font-weight:normal;font-size:13px">(protótipo web — somente leitura)</small></h2>' +
+      '<h2 style="margin:0">Cacau <small style="font-weight:normal;font-size:13px">(protótipo web)</small></h2>' +
       (message ? '<p style="margin:0;color:#b00">' + message + '</p>' : '') +
-      '<p style="margin:0;font-size:14px">Entre com a conta Google dona da planilha. Nada é gravado nesta etapa.</p>' +
+      '<p style="margin:0;font-size:14px">Entre com a conta Google dona da planilha.</p>' +
       '<label style="font-size:13px">Código (ID) ou link da planilha</label>' +
       '<input id="cacau-sheet" style="font-size:16px;padding:10px" placeholder="1AbC… ou link da planilha" value="' + saved.replace(/"/g, '&quot;') + '">' +
+      '<label style="font-size:13px;display:flex;gap:8px;align-items:flex-start"><input type="checkbox" id="cacau-write"' + (writeMode_() ? ' checked' : '') + ' style="margin-top:3px"> <span><b>Modo gravação</b> (lançar, editar e apagar valem de verdade na planilha). Para testar, use uma <b>cópia</b> da planilha.</span></label>' +
       '<button id="cacau-go" style="font-size:16px;padding:12px">Entrar com o Google</button>' +
       '<p id="cacau-gate-msg" style="margin:0;color:#b00;font-size:13px"></p>' +
       '</div>';
@@ -4254,6 +4459,7 @@ var CacauBackend = (function () {
       var m = raw.match(/\/d\/([a-zA-Z0-9_-]{20,})/);
       var id = m ? m[1] : raw;
       if (!/^[a-zA-Z0-9_-]{20,}$/.test(id)) { msg.textContent = 'Esse código/link de planilha não parece válido.'; return; }
+      setWriteMode_(gate.querySelector('#cacau-write').checked);
       msg.textContent = 'Abrindo o login do Google…';
       requestToken_(everSignedIn ? '' : 'select_account').then(function () {
         try { localStorage.setItem(SHEET_KEY, id); } catch (e) { /* segue */ }
@@ -4268,13 +4474,18 @@ var CacauBackend = (function () {
   }
 
   // ---------- Sheets API ----------
-  function api_(path, retried) {
+  function api_(path, init, retried) {
     stats.apiCalls++;
-    return fetch(SHEETS + path, { headers: { Authorization: 'Bearer ' + token.value } }).then(function (resp) {
+    var options = { method: (init && init.method) || 'GET', headers: { Authorization: 'Bearer ' + token.value } };
+    if (init && init.body !== undefined) {
+      options.headers['Content-Type'] = 'application/json';
+      options.body = JSON.stringify(init.body);
+    }
+    return fetch(SHEETS + path, options).then(function (resp) {
       if (resp.status === 401 && !retried) {
         token.expiresAt = 0;
         event_('API devolveu 401: renovando');
-        return ensureToken_().then(function () { return api_(path, true); });
+        return ensureToken_().then(function () { return api_(path, init, true); });
       }
       return resp.text().then(function (text) {
         if (!resp.ok) {
@@ -4292,7 +4503,9 @@ var CacauBackend = (function () {
     var fields = encodeURIComponent('spreadsheetUrl,properties.timeZone,sheets.properties(sheetId,title,gridProperties(rowCount,columnCount))');
     return api_(sheetId + '?fields=' + fields).then(function (r) {
       var tabs = (r.json.sheets || []).map(function (s) { return s.properties; }).filter(function (p) { return schemaNames.indexOf(p.title) !== -1; });
-      meta = { id: sheetId, url: r.json.spreadsheetUrl || '', tz: (r.json.properties || {}).timeZone || CacauGAS.scriptTimeZone, tabs: tabs };
+      var ids = {};
+      tabs.forEach(function (p) { ids[p.title] = p.sheetId; });
+      meta = { id: sheetId, url: r.json.spreadsheetUrl || '', tz: (r.json.properties || {}).timeZone || CacauGAS.scriptTimeZone, tabs: tabs, ids: ids };
       metaAt = Date.now();
       return { bytes: r.bytes };
     });
@@ -4319,7 +4532,7 @@ var CacauBackend = (function () {
     });
   }
 
-  function loadSnapshot_(sheetId, server) {
+  function loadSnapshot_(sheetId, server, retried) {
     var schemaNames = Object.keys(server.__SCHEMA);
     var net = { bytes: 0, api: 0, ms: 0 };
     var t0 = Date.now();
@@ -4342,10 +4555,17 @@ var CacauBackend = (function () {
         };
       });
       return { snapshot: { id: sheetId, url: meta.url, tz: meta.tz, sheets: sheets }, net: net };
+    }, function (err) {
+      // aba apagada/criada por fora com a lista de abas ainda em cache: relê a lista e tenta uma vez
+      if (!retried && /\(400\)/.test(err.message)) {
+        event_('lista de abas desatualizada: relendo');
+        meta = null;
+        return loadSnapshot_(sheetId, server, true);
+      }
+      throw err;
     });
   }
 
-  // ---------- chamada ----------
   function currentSheetId_() {
     var id = CacauGAS.PropertiesService.getUserProperties().getProperty('SPREADSHEET_ID');
     if (!id) throw new Error('Nenhuma planilha escolhida.');
@@ -4357,18 +4577,83 @@ var CacauBackend = (function () {
     return value === undefined ? null : JSON.parse(JSON.stringify(value));
   }
 
-  function call(fnName, args) {
+  // ---------- gravação ----------
+  /** Código numérico de cada aba que o passo usa; se faltar (aba recém-criada), relê a lista de abas. */
+  function idsFor_(sheetId, names, server) {
+    var known = function () { return names.every(function (n) { return meta && meta.ids && meta.ids[n] !== undefined; }); };
+    if (known()) return Promise.resolve(meta.ids);
+    meta = null;
+    return loadMeta_(sheetId, Object.keys(server.__SCHEMA)).then(function () {
+      if (!known()) throw new Error('Não achei a aba "' + names.filter(function (n) { return !(meta.ids[n] !== undefined); })[0] + '" na planilha.');
+      return meta.ids;
+    });
+  }
+
+  /** Confere que as linhas que o servidor leu (coluna ID) ainda são as mesmas na planilha. */
+  function verifyUnchanged_(sheetId, ops, server) {
+    var names = CacauWriter.sheetsToVerify(ops).filter(function (n) { return meta && meta.ids && meta.ids[n] !== undefined; });
+    if (!names.length) return Promise.resolve();
+    var cols = names.map(function (n) { return (server.__SCHEMA[n] || []).indexOf('ID') + 1 || 1; });
+    var query = names.map(function (n, i) {
+      var letter = CacauWriter.colLetter(cols[i]);
+      var last = CacauGAS.originalColumn(n, cols[i]).length + 1;
+      return 'ranges=' + encodeURIComponent("'" + n.replace(/'/g, "''") + "'!" + letter + '2:' + letter + Math.max(last, 2));
+    }).join('&');
+    return api_(sheetId + '/values:batchGet?' + query + '&majorDimension=COLUMNS&valueRenderOption=UNFORMATTED_VALUE').then(function (r) {
+      (r.json.valueRanges || []).forEach(function (vr, i) {
+        var before = CacauGAS.originalColumn(names[i], cols[i]);
+        var now = (vr.values && vr.values[0]) || [];
+        for (var k = 0; k < before.length; k++) {
+          var was = before[k] === undefined ? '' : before[k];
+          var is = now[k] === undefined ? '' : now[k];
+          if (String(was) !== String(is)) { event_('conflito na aba ' + names[i] + ' (linha ' + (k + 2) + ')'); throw new Error(CONFLICT_MESSAGE); }
+        }
+      });
+    });
+  }
+
+  function runSteps_(sheetId, steps, index, server) {
+    if (index >= steps.length) return Promise.resolve();
+    var step = steps[index];
+    var names = CacauWriter.sheetsNeedingIds(step);
+    var ready = names.length ? idsFor_(sheetId, names, server) : Promise.resolve(meta ? meta.ids : {});
+    return ready.then(function (ids) {
+      var req = CacauWriter.request(step, ids, meta ? meta.tz : CacauGAS.scriptTimeZone, CacauGAS.dateToSerial);
+      return api_(sheetId + req.path, { method: req.method, body: req.body });
+    }).then(function () {
+      if (step.kind === 'structure' && CacauWriter.createsSheets(step.ops)) meta = null; // sheetIds mudaram
+      return runSteps_(sheetId, steps, index + 1, server);
+    });
+  }
+
+  function flush_(sheetId, server, record) {
+    var ops = CacauGAS.pendingOps();
+    if (!ops.length) return Promise.resolve();
+    record.writes = ops.length;
+    var steps = CacauWriter.plan(ops);
+    return verifyUnchanged_(sheetId, ops, server).then(function () {
+      return runSteps_(sheetId, steps, 0, server);
+    });
+  }
+
+  // ---------- chamada ----------
+  function runCall_(fnName, args) {
     var started = Date.now();
     var record = { at: started, fn: fnName, ms: 0, netMs: 0, api: 0, bytes: 0 };
     var apiBefore = stats.apiCalls;
+    var writing = writeMode_();
     return ready.then(function () { return ensureToken_(); }).then(function () {
       var server = window.CacauServer;
       if (typeof server[fnName] !== 'function') throw new Error('Função "' + fnName + '" não existe no pacote web.');
-      return loadSnapshot_(currentSheetId_(), server).then(function (loaded) {
+      var id = currentSheetId_();
+      return loadSnapshot_(id, server).then(function (loaded) {
         record.netMs = loaded.net.ms;
         record.bytes = loaded.net.bytes;
-        CacauGAS.setSnapshot(loaded.snapshot, { discardWrites: /^(get|list)[A-Z]/.test(fnName) });
-        return clone_(server[fnName].apply(null, args));
+        var mode = writing ? 'write' : (/^(get|list)[A-Z]/.test(fnName) ? 'discard' : 'readonly');
+        CacauGAS.setSnapshot(loaded.snapshot, { mode: mode });
+        var result = clone_(server[fnName].apply(null, args));
+        if (mode !== 'write') return result;
+        return flush_(id, server, record).then(function () { return result; });
       });
     }).then(function (result) {
       record.ms = Date.now() - started;
@@ -4384,6 +4669,14 @@ var CacauBackend = (function () {
       renderDiag_();
       throw err;
     });
+  }
+
+  /** Uma chamada por vez (o papel do LockService no Apps Script). */
+  function call(fnName, args) {
+    var run = function () { return runCall_(fnName, args); };
+    var next = queue.then(run, run);
+    queue = next.then(function () {}, function () {});
+    return next;
   }
 
   function start() {
