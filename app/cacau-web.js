@@ -4067,6 +4067,7 @@ var CacauBackend = (function () {
   var SILENT_TIMEOUT_MS = 8000;
   var TOKEN_MARGIN_MS = 60 * 1000;
   var SHEETS = 'https://sheets.googleapis.com/v4/spreadsheets/';
+  var TOKEN_KEY = 'cacau-web-token';
 
   var tokenClient = null;
   var pendingToken = null; // { resolve, reject }
@@ -4103,7 +4104,10 @@ var CacauBackend = (function () {
   }
   function mountDiag_() {
     var off = false;
-    try { off = localStorage.getItem(DIAG_KEY) === '1'; } catch (e) { /* segue */ }
+    try {
+      if (/[?&]diag=1/.test(location.search)) localStorage.removeItem(DIAG_KEY);
+      off = localStorage.getItem(DIAG_KEY) === '1';
+    } catch (e) { /* segue */ }
     var box = document.createElement('div');
     box.id = 'cacau-diag';
     box.setAttribute('style', 'position:fixed;left:8px;bottom:8px;z-index:200;max-width:92vw;background:rgba(0,0,0,.78);color:#fff;font:11px/1.35 monospace;padding:6px 8px;border-radius:8px');
@@ -4146,6 +4150,7 @@ var CacauBackend = (function () {
           }
           token = { value: resp.access_token, expiresAt: Date.now() + Number(resp.expires_in || 3600) * 1000 - TOKEN_MARGIN_MS, grantedAt: Date.now() };
           everSignedIn = true;
+          saveToken_();
           event_('token novo (vale ' + Math.round(Number(resp.expires_in || 3600) / 60) + ' min)');
           if (p) p.resolve();
         },
@@ -4165,6 +4170,18 @@ var CacauBackend = (function () {
         tokenClient.requestAccessToken({ prompt: prompt });
       });
     });
+  }
+
+  /** Guarda o token só na aba (sessionStorage): sobrevive ao F5, some ao fechar a aba. */
+  function saveToken_() {
+    try { sessionStorage.setItem(TOKEN_KEY, JSON.stringify(token)); } catch (e) { /* segue */ }
+  }
+  function restoreToken_() {
+    try {
+      var saved = JSON.parse(sessionStorage.getItem(TOKEN_KEY) || 'null');
+      if (saved && saved.value && Date.now() < saved.expiresAt) { token = saved; everSignedIn = true; return true; }
+    } catch (e) { /* segue */ }
+    return false;
   }
 
   function tokenValid_() { return token.value && Date.now() < token.expiresAt; }
@@ -4207,6 +4224,7 @@ var CacauBackend = (function () {
     try { if (token.value && window.google) google.accounts.oauth2.revoke(token.value, function () {}); } catch (e) { /* segue */ }
     token = { value: '', expiresAt: 0, grantedAt: 0 };
     everSignedIn = false;
+    try { sessionStorage.removeItem(TOKEN_KEY); } catch (e) { /* segue */ }
     location.reload();
   }
 
@@ -4370,6 +4388,14 @@ var CacauBackend = (function () {
 
   function start() {
     mountDiag_();
+    var sheetId = '';
+    try { sheetId = localStorage.getItem(SHEET_KEY) || ''; } catch (e) { /* segue */ }
+    if (sheetId && restoreToken_()) {
+      CacauGAS.PropertiesService.getUserProperties().setProperty('SPREADSHEET_ID', sheetId);
+      event_('sessão retomada após recarregar (token ainda valia)');
+      fetchEmail_().then(function () { gateDone(); });
+      return;
+    }
     askUser_('');
   }
   document.addEventListener('DOMContentLoaded', start);
