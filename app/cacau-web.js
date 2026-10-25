@@ -2,7 +2,7 @@
 // Preencher com o "ID do cliente" do tipo "Aplicativo da Web" criado no Console do Google Cloud,
 // com a origem https://luishfilho.github.io autorizada.
 window.CACAU_WEB_CONFIG = {
-  clientId: ''
+  clientId: '423371820715-put6v1djqjsgp42dlhnkc7ogcbns13mg.apps.googleusercontent.com'
 };
 
 /**
