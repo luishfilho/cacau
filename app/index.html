@@ -6660,12 +6660,12 @@
   }
 
   /** Lê o STATE e monta as metas do Resumo (null = sem linha): só no modo Despesas; some com filtro de conta ou de texto (não dá pra mapear em orçamento) e quando
-   *  não há teto nenhum (sem orçamento / sem histórico pra Automático). Filtro de categoria
-   *  mantém só os orçamentos que tocam alguma das categorias filtradas (o "não orçamentado"
-   *  entra se alguma delas não tem orçamento) e as receitas recorrentes dessas categorias.
-   *  O teto diário é constante por orçamento (taxa) -- o de hoje, igual às barras de
-   *  Orçamentos (ver budgetMonthlyAmount_). Gasto = o mesmo dos orçamentos
-   *  (data efetiva, fora das análises e vinculados a recorrente de fora, líquido de
+   *  não há teto nenhum (sem orçamento / sem histórico pra Automático). A conta é a do orçamento GERAL (uma regra só
+   *  pro gasto geral do app): SEM filtro de categoria o teto de cada mês é o do próprio Geral (budgetMonthlyAmount_:
+   *  soma dos orçamentos + estimativa do que não tem orçamento, ou o valor fixo que a pessoa digitou) e o gasto é o de
+   *  todas as despesas. COM filtro de categoria, as mesmas peças do Geral automático (geralLimitFn_), só as dos
+   *  orçamentos que tocam as categorias filtradas e a estimativa das categorias filtradas sem orçamento.
+   *  Gasto = o mesmo dos orçamentos (data efetiva, fora das análises e vinculados a recorrente de fora, líquido de
    *  reembolso). */
   function computeDayBarsTargets_(days, mode) {
     if (mode === 'income') return null;
@@ -6674,27 +6674,38 @@
     var filterIds = f.categoryIds || [];
     function hit(ids) { return !filterIds.length || ids.some(function (id) { return filterIds.indexOf(id) !== -1; }); }
     var ymNow = todayYmd().slice(0, 7);
-    var dimNow = daysInMonth_(ymNow);
-    var budgets = STATE.budgets.filter(function (b) { return !b.archived && !b.isUnbudgetedCatchAll && hit(b.categoryIds); });
-    var daily = budgets.reduce(function (sum, b) { return sum + budgetMonthlyAmount_(b, ymNow) / dimNow; }, 0);
+    var geral = (STATE.budgets || []).filter(function (b) { return b.isUnbudgetedCatchAll && !b.archived; })[0];
     var covered = {};
-    budgets.forEach(function (b) { b.categoryIds.forEach(function (id) { covered[id] = true; }); });
-    var catchIds = unbudgetedExpenseCategoryIds_();
-    if (catchIds.length && hit(catchIds)) {
-      var catchAmount = budgetAutoAmount_(catchIds, { unit: 'month', count: 1 });
-      if (catchAmount !== null) {
-        daily += catchAmount / BUDGET_REFERENCE_MONTH_DAYS_;
-        catchIds.forEach(function (id) { covered[id] = true; });
-      }
+    var limitOfMonth;
+    if (!filterIds.length) {
+      if (!geral) return null;
+      var eff = budgetWithEffectiveCategories_(geral);
+      geralAllExpenseCategoryIds_().forEach(function (id) { covered[id] = true; });
+      limitOfMonth = function (ym) { return budgetMonthlyAmount_(eff, ym); };
+    } else {
+      var parts = [];
+      STATE.budgets.filter(function (b) { return !b.archived && !b.isUnbudgetedCatchAll && hit(b.categoryIds); }).forEach(function (b) {
+        b.categoryIds.forEach(function (id) { covered[id] = true; });
+        var amount = budgetBaseAmount_(b);
+        if (amount !== null && amount !== undefined && amount > 0) parts.push({ b: b, amount: amount });
+      });
+      var catchIds = unbudgetedExpenseCategoryIds_().filter(function (id) { return hit([id]); });
+      var estimate = geralUnbudgetedEstimate_(catchIds);
+      if (estimate > 0) catchIds.forEach(function (id) { covered[id] = true; });
+      var limitFn = geralLimitFn_(geral ? budgetCycleSpecOf_(geral) : { unit: 'month', count: 1, scaleByDays: true }, { parts: parts, estimate: estimate });
+      limitOfMonth = function (ym) { return limitFn(ym + '-01', lastDayOfYm_(ym)); };
     }
-    if (daily <= 0) return null;
+    // O teto de cada mês é pedido várias vezes por dia desenhado: guarda por mês.
+    var monthCache = {};
+    function monthLimit(ym) { return monthCache[ym] !== undefined ? monthCache[ym] : (monthCache[ym] = limitOfMonth(ym)); }
+    if (!(monthLimit(ymNow) > 0)) return null;
     var spentByDay = {};
     STATE.allTransactions.forEach(function (t) {
       if (t.kind !== 'expense' || !covered[t.categoryId] || t.excludeFromAnalysis || t.forecastId) return;
-      var eff = budgetEffectiveDate_(t);
-      if (eff) spentByDay[eff] = (spentByDay[eff] || 0) + netAmountOfPassiveForBudget_(t);
+      var eff2 = budgetEffectiveDate_(t);
+      if (eff2) spentByDay[eff2] = (spentByDay[eff2] || 0) + netAmountOfPassiveForBudget_(t);
     });
-    var lines = dayBarsTargetLines_(days, function (ym) { return daily * daysInMonth_(ym); }, spentByDay, todayYmd());
+    var lines = dayBarsTargetLines_(days, monthLimit, spentByDay, todayYmd());
     lines.spent = spentByDay; // pra dayBarsTargetStatus_ julgar na mesma base da meta
     return lines;
   }
