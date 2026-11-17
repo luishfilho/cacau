@@ -942,6 +942,22 @@
      no topo da tela pra descontar (a barra de abas fica no rodapé). z-index maior que
      conteúdo normal pra ficar por cima da lista de lançamentos ao "grudar". */
   .tx-calendar-card { position: sticky; top: 0; z-index: 5; }
+  /* No Início o Resumo é um card comum (não gruda no topo) e o dia não leva a lugar nenhum. */
+  .tx-calendar-card.tx-calendar-home { position: static; }
+  .tx-calendar-home .day-bar-clickable { cursor: default; }
+  .tx-calendar-home .day-bar-clickable:hover { background: none; }
+  /* "×" na extrema direita do cabeçalho de Filtrar lançamentos. */
+  .tx-filters-clear { flex-shrink: 0; display: inline-flex; align-items: center; justify-content: center; width: 28px; height: 28px; padding: 0; margin: 0 -4px 0 0;
+    border: none; border-radius: 50%; background: none; color: var(--text-muted); cursor: pointer; }
+  .tx-filters-clear[hidden] { display: none; }
+  .tx-filters-clear:hover { background: var(--border); color: var(--text); }
+  /* Botão "Editar cards" no topo do Início e setas do editor. */
+  .home-edit-row { display: flex; justify-content: flex-end; margin-bottom: 8px; }
+  .home-edit-row button { width: auto; font-size: 12px; padding: 6px 12px; }
+  .home-card-row { align-items: center; gap: 8px; }
+  .home-card-move { display: flex; align-items: center; justify-content: center; width: 32px; height: 32px; padding: 0; border-radius: 50%; line-height: 0; }
+  .home-card-move svg { display: block; width: 18px; height: 18px; fill: none; stroke: currentColor; stroke-width: 2.2; stroke-linecap: round; stroke-linejoin: round; pointer-events: none; }
+  .home-card-move:disabled { opacity: 0.35; cursor: default; }
 
   /* Borda que pisca no card do dia ao clicar num dia do calendário (ver scrollToTxDay_,
      JavaScript.html) -- acende em azul na hora (0%) e some com um fade de 2s (pedido
@@ -1715,7 +1731,9 @@
     txVisibleCount: 50, // quantos lançamentos (não cards) o Extrato renderiza antes de "Carregar mais" — ver TX_PAGE_SIZE
     txCalendarExpanded: true, // card do calendário do Extrato começa aberto (diferente do de filtro) -- é o conteúdo mais visual da tela
     txCalendarMode: 'expense', // o que as barras do Resumo somam por dia: 'expense' | 'income'
-    txCalendarScrollLeft: null, // posição de rolagem horizontal do calendário em semanas -- null até renderTxCalendarWeeks_ escolher um padrão (rolar até o fim, semanas mais recentes)
+    txCalendarScrollLeft: null, // posição de rolagem horizontal do Resumo -- null = ainda não rolado À MÃO (abre na data de hoje); só o usuário rolando grava (ver positionTxCalendarScroll_)
+    homeCalendarExpanded: true, // o Resumo do Início tem estado próprio (aberto/fechado e rolagem), separado do Resumo do Extrato
+    homeCalendarScrollLeft: null,
     pendingTransactions: [], // lançamentos otimistas, mostrados antes do servidor confirmar
     deletingIds: [], // lançamentos que o usuário já mandou excluir, ocultos até o servidor confirmar
     people: [], // quem te deve/pagou reembolso (ver Refunds.js)
@@ -2173,7 +2191,7 @@
    * longo também disparava o clique ao soltar, a página rolava e o tooltip sumia junto).
    * Com mouse, hover mostra o tooltip e o clique rola, como sempre.
    */
-  var DAY_LONG_PRESS_MS_ = 350;
+  var DAY_LONG_PRESS_MS_ = 200;
   function wireDayCell_(el, onTap, lazy) {
     if (HOVER_CAPABLE_) {
       el.addEventListener('click', onTap);
@@ -4202,6 +4220,101 @@
     return '<div class="accounts-sum">' + (sm.hasCards ? part('Dinheiro', sm.cash) + part('Crédito', sm.credit) : '') + part('Total', sm.total) + '</div>';
   }
 
+  // ---------- cards do Início: quais aparecem e em que ordem ----------
+  var HOME_CARDS_ = [
+    { id: 'trend', label: 'Projeção do saldo' },
+    { id: 'budgets', label: 'Orçamentos' },
+    { id: 'summary', label: 'Resumo' },
+    { id: 'accounts', label: 'Contas' },
+    { id: 'bills', label: 'Faturas de cartão' },
+    { id: 'categories', label: 'Gastos por categoria' },
+    { id: 'recent', label: 'Últimos lançamentos' }
+  ];
+  var HOME_CARDS_KEY_ = 'financas-home-cards'; // por aparelho, como o tema e o lado da barra de abas
+  var HOME_EDIT_ICON_ = '<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" ' +
+    'stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="vertical-align:-2px"><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg>';
+  var HOME_MOVE_ICONS_ = {
+    up: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 15l6-6 6 6"/></svg>',
+    down: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 9l6 6 6-6"/></svg>'
+  };
+  /** { order: [ids de todos os cards], hidden: [ids escondidos] } -- sempre completo e válido: id
+   *  desconhecido sai; card novo (que a versão guardada não conhecia) entra no fim, visível. */
+  function homeCardsPrefs_() {
+    var stored = null;
+    try { stored = JSON.parse(localStorage.getItem(HOME_CARDS_KEY_)); } catch (e) { stored = null; }
+    var known = HOME_CARDS_.map(function (c) { return c.id; });
+    var order = [];
+    ((stored && Array.isArray(stored.order)) ? stored.order : []).forEach(function (id) {
+      if (known.indexOf(id) !== -1 && order.indexOf(id) === -1) order.push(id);
+    });
+    known.forEach(function (id) { if (order.indexOf(id) === -1) order.push(id); });
+    var hidden = ((stored && Array.isArray(stored.hidden)) ? stored.hidden : []).filter(function (id, i, arr) {
+      return known.indexOf(id) !== -1 && arr.indexOf(id) === i;
+    });
+    return { order: order, hidden: hidden };
+  }
+  function homeCardsPrefsSave_(prefs) {
+    try { localStorage.setItem(HOME_CARDS_KEY_, JSON.stringify(prefs)); } catch (e) { /* sem armazenamento: vale só até recarregar */ }
+  }
+  function openHomeCardsModal_() {
+    function listHtml() {
+      var prefs = homeCardsPrefs_();
+      return prefs.order.map(function (id, i) {
+        var card = HOME_CARDS_.filter(function (c) { return c.id === id; })[0];
+        return '<div class="row home-card-row">' +
+          '<label style="display:flex;align-items:center;gap:10px;flex:1;margin:0;cursor:pointer">' +
+            '<input type="checkbox" data-home-card="' + id + '" style="width:auto;margin:0"' + (prefs.hidden.indexOf(id) === -1 ? ' checked' : '') + '> ' + escapeHtml(card.label) +
+          '</label>' +
+          '<span style="display:flex;gap:6px">' +
+            '<button type="button" class="secondary home-card-move" data-home-move="up" data-home-id="' + id + '" aria-label="Subir ' + escapeHtml(card.label) + '"' + (i === 0 ? ' disabled' : '') + '>' + HOME_MOVE_ICONS_.up + '</button>' +
+            '<button type="button" class="secondary home-card-move" data-home-move="down" data-home-id="' + id + '" aria-label="Descer ' + escapeHtml(card.label) + '"' + (i === prefs.order.length - 1 ? ' disabled' : '') + '>' + HOME_MOVE_ICONS_.down + '</button>' +
+          '</span></div>';
+      }).join('');
+    }
+    function wire() {
+      var host = document.getElementById('home-cards-list');
+      host.innerHTML = listHtml();
+      host.querySelectorAll('input[data-home-card]').forEach(function (cb) {
+        cb.onchange = function () {
+          var prefs = homeCardsPrefs_();
+          var id = cb.dataset.homeCard;
+          prefs.hidden = prefs.hidden.filter(function (x) { return x !== id; });
+          if (!cb.checked) prefs.hidden.push(id);
+          homeCardsPrefsSave_(prefs);
+          renderDashboard();
+        };
+      });
+      host.querySelectorAll('button[data-home-move]').forEach(function (btn) {
+        btn.onclick = function () {
+          var prefs = homeCardsPrefs_();
+          var i = prefs.order.indexOf(btn.dataset.homeId);
+          var j = btn.dataset.homeMove === 'up' ? i - 1 : i + 1;
+          if (i === -1 || j < 0 || j >= prefs.order.length) return;
+          var tmp = prefs.order[i]; prefs.order[i] = prefs.order[j]; prefs.order[j] = tmp;
+          homeCardsPrefsSave_(prefs);
+          wire();
+          renderDashboard();
+        };
+      });
+    }
+    openModal(
+      '<h2>Cards do Início</h2>' +
+      '<div class="muted" style="margin-bottom:12px">Marque o que aparece e use as setas pra mudar a ordem. Vale só neste aparelho.</div>' +
+      '<div id="home-cards-list"></div>' +
+      '<div style="display:flex;gap:8px;margin-top:14px">' +
+        '<button type="button" class="secondary" id="home-cards-reset" style="flex:1">Restaurar padrão</button>' +
+        '<button type="button" id="home-cards-done" style="flex:1">Pronto</button>' +
+      '</div>'
+    );
+    wire();
+    document.getElementById('home-cards-reset').onclick = function () {
+      homeCardsPrefsSave_({ order: HOME_CARDS_.map(function (c) { return c.id; }), hidden: [] });
+      wire();
+      renderDashboard();
+    };
+    document.getElementById('home-cards-done').onclick = closeModal;
+  }
+
   function renderDashboard() {
     var d = STATE.dashboard;
     var root = document.getElementById('view-root');
@@ -4244,20 +4357,31 @@
     var budgetTimelineHtml = buildBudgetTimelineHtml(d);
     var expensesByCategory = netExpensesByCategory_(d);
 
+    // Cards do Início: cada um vira um pedaço de HTML; quais aparecem e em que ordem vem do usuário
+    // (homeCardsPrefs_, botão "Editar cards").
+    var prefs = homeCardsPrefs_();
+    var shown = prefs.order.filter(function (id) { return prefs.hidden.indexOf(id) === -1; });
+    var cardHtml = {
+      trend: function () { return buildBalanceTrendHtml_(); },
+      budgets: function () { return budgetTimelineHtml; },
+      summary: function () { return buildTxCalendarHtml_('home'); },
+      accounts: function () { return '<div class="card"><h2>Contas</h2>' + accountsSummaryHtml_(d.accounts) + accountsHtml + '</div>'; },
+      bills: function () { return billsHtml ? '<div class="card"><h2>Faturas de cartão</h2>' + billsHtml + '</div>' : ''; },
+      categories: function () {
+        return '<div class="card">' +
+          '<h2>Gastos por categoria (' + fmtMonthYear(d.month) + ')</h2>' +
+          (expensesByCategory.length ? '<canvas id="chart-expenses" height="220"></canvas>' : '<div class="empty-state">Sem despesas neste mês.</div>') +
+        '</div>';
+      },
+      recent: function () { return '<div class="card"><h2>Últimos lançamentos</h2>' + recentHtml + '</div>'; }
+    };
+
     root.innerHTML =
-      buildBalanceTrendHtml_() +
-      budgetTimelineHtml +
-      '<div class="card">' +
-        '<h2>Contas</h2>' + accountsSummaryHtml_(d.accounts) + accountsHtml +
-      '</div>' +
-      (billsHtml ? '<div class="card"><h2>Faturas de cartão</h2>' + billsHtml + '</div>' : '') +
-      '<div class="card">' +
-        '<h2>Gastos por categoria (' + fmtMonthYear(d.month) + ')</h2>' +
-        (expensesByCategory.length ? '<canvas id="chart-expenses" height="220"></canvas>' : '<div class="empty-state">Sem despesas neste mês.</div>') +
-      '</div>' +
-      '<div class="card">' +
-        '<h2>Últimos lançamentos</h2>' + recentHtml +
-      '</div>';
+      '<div class="home-edit-row"><button type="button" class="secondary" id="home-edit-cards">' + HOME_EDIT_ICON_ + ' Editar cards</button></div>' +
+      shown.map(function (id) { return cardHtml[id](); }).join('') +
+      (shown.length ? '' : '<div class="card"><div class="empty-state">Nenhum card ativo. Use "Editar cards" pra escolher o que aparece aqui.</div></div>');
+    document.getElementById('home-edit-cards').onclick = openHomeCardsModal_;
+    if (shown.indexOf('summary') !== -1) wireTxCalendarCard_('home');
 
     // wireTooltipTrigger_ também dá suporte a toque, que esse pino não tinha antes
     // (só mouseenter — no celular, tocar um pino não mostrava nada).
@@ -4276,7 +4400,7 @@
 
     renderBalanceTrendChart_();
 
-    if (expensesByCategory.length && window.Chart) {
+    if (expensesByCategory.length && window.Chart && document.getElementById('chart-expenses')) {
       var ctx = document.getElementById('chart-expenses').getContext('2d');
       new Chart(ctx, {
         type: 'doughnut',
@@ -5295,6 +5419,10 @@
     });
   }
 
+  // "×" (Lucide x) do cabeçalho de Filtrar lançamentos.
+  var TX_CLEAR_ICON_ = '<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2.2" ' +
+    'stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg>';
+
   function renderTransactions() {
     var root = document.getElementById('view-root');
     var f = STATE.txFilters;
@@ -5314,6 +5442,9 @@
           '</div>' +
           '<span id="tx-filters-chevron" style="display:inline-block;color:var(--text-muted);transition:transform 200ms ease;flex-shrink:0;' +
             'transform:rotate(' + (filtersExpanded ? '180deg' : '0deg') + ')">▾</span>' +
+          // X na extrema direita do cabeçalho: limpa todos os filtros (só aparece com filtro ativo).
+          '<button type="button" id="tx-reset-filters" class="tx-filters-clear" title="Limpar filtros" aria-label="Limpar filtros"' +
+            (txFiltersActive_(f) ? '' : ' hidden') + '>' + TX_CLEAR_ICON_ + '</button>' +
         '</div>' +
         '<div id="tx-filters-collapse" style="display:grid;grid-template-rows:' + (filtersExpanded ? '1fr' : '0fr') + ';transition:grid-template-rows 200ms ease">' +
           '<div style="overflow:hidden;min-height:0">' +
@@ -5332,15 +5463,12 @@
                 '<div style="flex:1"><label>De</label><input type="date" id="f-from" value="' + (f.dateFrom || '') + '"></div>' +
                 '<div style="flex:1"><label>Até</label><input type="date" id="f-to" value="' + (f.dateTo || '') + '"></div>' +
               '</div>' +
-              '<div style="display:flex;gap:8px">' +
-                '<button type="button" class="secondary" id="tx-reset-filters" style="flex:1">Limpar filtros</button>' +
-                (typeof FINANCAS_MULTIUSER !== 'undefined' && FINANCAS_MULTIUSER ? '' : '<button type="button" class="secondary" id="tx-import-doc" style="flex:1">Importar documento</button>') +
-              '</div>' +
+              (typeof FINANCAS_MULTIUSER !== 'undefined' && FINANCAS_MULTIUSER ? '' : '<div style="display:flex;gap:8px"><button type="button" class="secondary" id="tx-import-doc" style="flex:1">Importar documento</button></div>') +
             '</div>' +
           '</div>' +
         '</div>' +
       '</div>' +
-      buildTxCalendarHtml_() +
+      buildTxCalendarHtml_('extrato') +
       '<div id="tx-list"><div class="empty-state">Carregando…</div></div>';
 
     document.getElementById('tx-filters-header').onclick = function () {
@@ -5352,15 +5480,7 @@
     };
     renderTxFilterChips_();
 
-    document.getElementById('tx-calendar-header').onclick = function () {
-      STATE.txCalendarExpanded = !STATE.txCalendarExpanded;
-      document.getElementById('tx-calendar-collapse').style.gridTemplateRows = STATE.txCalendarExpanded ? '1fr' : '0fr';
-      document.getElementById('tx-calendar-chevron').style.transform = 'rotate(' + (STATE.txCalendarExpanded ? '180deg' : '0deg') + ')';
-    };
-    // 1 vez só aqui (não em renderTxCalendarWeeks_, chamada a cada filtro) -- o
-    // container persiste entre filtros, só o conteúdo dele é redesenhado.
-    setupCalendarDragScroll_(document.getElementById('tx-calendar-weeks-wrap'));
-    renderTxCalendar_();
+    wireTxCalendarCard_('extrato');
 
     var categoryIds = (f.categoryIds || []).slice();
     var accountField = createCapsuleField(document.getElementById('f-account-field'), {
@@ -5386,6 +5506,8 @@
       STATE.txCalendarScrollLeft = null; // filtro novo = volta a rolar pras semanas mais recentes (ver renderTxCalendarWeeks_)
       loadTxList();
       renderTxFilterChips_();
+      var clearBtn = document.getElementById('tx-reset-filters');
+      if (clearBtn) clearBtn.hidden = !txFiltersActive_(STATE.txFilters);
       renderTxCalendar_();
     }
 
@@ -5402,9 +5524,11 @@
     };
     document.getElementById('f-from').addEventListener('change', applyTxFilters_);
     document.getElementById('f-to').addEventListener('change', applyTxFilters_);
-    document.getElementById('tx-reset-filters').onclick = function () {
+    document.getElementById('tx-reset-filters').onclick = function (ev) {
+      ev.stopPropagation(); // o cabeçalho inteiro abre/fecha o card
       STATE.txFilters = {};
       STATE.txVisibleCount = TX_PAGE_SIZE;
+      STATE.txCalendarScrollLeft = null; // sem filtro o Resumo volta a abrir em hoje
       renderTransactions(); // refaz o card inteiro — reseta os controles (conta/categoria/data/busca) também
     };
     var importDocBtn = document.getElementById('tx-import-doc');
@@ -5494,9 +5618,12 @@
    *  exatamente o conjunto que o Extrato exibe. Compartilhado por loadTxList (a lista em
    *  si), o calendário do Extrato (soma diária) e scrollToTxDay_ (achar em qual página
    *  um dia cai), pra não recalcular esse filtro 3 vezes com pequenas variações. */
+  /** O Resumo do Início nunca usa os filtros do Extrato (não tem como o usuário ver/limpar esses filtros ali). */
+  function calFilters_() { return txCalendarScope_ === 'home' ? {} : STATE.txFilters; }
   function currentFilteredTransactionsCombined_() {
-    var pending = STATE.pendingTransactions.filter(function (t) { return txMatchesFilters(t, STATE.txFilters); });
-    var txs = STATE.allTransactions.filter(function (t) { return txMatchesFilters(t, STATE.txFilters); });
+    var filters = calFilters_();
+    var pending = STATE.pendingTransactions.filter(function (t) { return txMatchesFilters(t, filters); });
+    var txs = STATE.allTransactions.filter(function (t) { return txMatchesFilters(t, filters); });
     return pending.concat(txs).filter(function (t) { return STATE.deletingIds.indexOf(t.id) === -1; });
   }
 
@@ -5516,7 +5643,7 @@
    * senão cai pro intervalo entre o lançamento filtrado mais antigo e o mais novo.
    */
   function buildTxCalendarFilteredStatsHtml_() {
-    var f = STATE.txFilters;
+    var f = calFilters_();
     if (!txFiltersActive_(f)) return '';
     var combined = currentFilteredTransactionsCombined_();
     var total = 0, count = 0, minDate = null, maxDate = null;
@@ -6313,7 +6440,7 @@
   }
   function computeCalendarDateRange_() {
     var txDates = currentFilteredTransactionsCombined_().map(function (t) { return t.date; });
-    return calendarDateRangeForFilter_(STATE.txFilters, txDates, todayYmd());
+    return calendarDateRangeForFilter_(calFilters_(), txDates, todayYmd());
   }
 
   /** Domingo da semana de uma data (Date.getDay(): 0 = domingo). */
@@ -6669,7 +6796,7 @@
    *  reembolso). */
   function computeDayBarsTargets_(days, mode) {
     if (mode === 'income') return null;
-    var f = STATE.txFilters || {};
+    var f = calFilters_() || {};
     if (f.accountId || f.text) return null;
     var filterIds = f.categoryIds || [];
     function hit(ids) { return !filterIds.length || ids.some(function (id) { return filterIds.indexOf(id) !== -1; }); }
@@ -6982,7 +7109,7 @@
       if (targets) targets.status = dayBarsTargetStatus_(days, targets, todayYmd());
       container.innerHTML = buildDayBarsHtml_(days, totals, computeDayBarsRef_(totals, targets), STATE.txCalendarMode, computeCalendarFlaggedOnlyDays_(combined, nets), targets);
       container.querySelectorAll('.day-bar-cell[data-date]').forEach(function (el) {
-        wireDayCell_(el, function () { scrollToTxDay_(el.dataset.date); });
+        wireDayCell_(el, function () { calDayTap_(el.dataset.date); });
       });
       positionTxCalendarScroll_(container);
       return;
@@ -6995,44 +7122,85 @@
     container.innerHTML = buildWeekCalendarHtml_(weekColumns, nets, posRef, negRef, computeCalendarFlaggedOnlyDays_(combined, nets));
 
     container.querySelectorAll('.mini-cal-day[data-date]').forEach(function (el) {
-      wireDayCell_(el, function () { scrollToTxDay_(el.dataset.date); });
+      wireDayCell_(el, function () { calDayTap_(el.dataset.date); });
     });
     positionTxCalendarScroll_(container);
   }
 
-  /** Posiciona a rolagem horizontal do Resumo/calendário depois de reconstruir o conteúdo.
-   *  Sem posição guardada (app recém-aberto ou filtro novo) vai pra DATA ATUAL (centraliza o
-   *  dia de hoje; sem hoje no intervalo, vai ao fim). Antes, a rolagem do navegador ao trocar
-   *  o innerHTML disparava um onscroll com scrollLeft 0 que sobrescrevia a posição guardada, e
-   *  um render com a aba ainda sem layout (largura 0) não conseguia rolar: o Resumo abria todo
-   *  à esquerda. Por isso o onscroll só é ligado depois que a posição assenta e, sem layout
-   *  ainda, tenta de novo no próximo quadro (até ~20). */
+  /** Rolagem guardada do Resumo desta tela (Extrato e Início têm a sua). */
+  function calScrollKey_() { return txCalendarScope_ === 'home' ? 'homeCalendarScrollLeft' : 'txCalendarScrollLeft'; }
+  function calDayTap_(date) {
+    if (txCalendarScope_ === 'home') return; // no Início não há lista por dia pra rolar
+    scrollToTxDay_(date);
+  }
+
+  /** Posiciona a rolagem horizontal do Resumo depois de reconstruir o conteúdo.
+   *  REGRA: só a rolagem feita À MÃO pelo usuário é guardada (STATE.*CalendarScrollLeft). Sem isso, abre
+   *  e re-renderiza SEMPRE centrado na data de hoje (sem hoje no intervalo, no fim). Antes o app guardava
+   *  também a posição que ele mesmo escolhia: um render cedo, com poucos lançamentos (grade mais curta
+   *  que a tela, scrollLeft preso em 0) ou com a aba ainda sem layout, gravava 0, e os renders seguintes
+   *  -- já com o histórico todo -- restauravam esse 0: o Resumo abria na data de início. Agora, enquanto o
+   *  usuário não rolou, a posição é refeita a cada render e ainda reconferida logo depois (a largura do
+   *  conteúdo pode mudar quando os dados/fontes terminam de chegar). Sem layout ainda (largura 0), tenta de
+   *  novo no próximo quadro (até ~20). */
   function positionTxCalendarScroll_(container) {
     container.onscroll = null;
+    var key = calScrollKey_();
     var tries = 0;
+    function center() {
+      var cell = container.querySelector('[data-date="' + todayYmd() + '"]');
+      if (cell) {
+        var cellLeft = cell.getBoundingClientRect().left - container.getBoundingClientRect().left + container.scrollLeft;
+        container.scrollLeft = Math.max(0, cellLeft - (container.clientWidth - cell.offsetWidth) / 2);
+      } else {
+        container.scrollLeft = container.scrollWidth;
+      }
+    }
     function place() {
       if (!container.isConnected) return;
       if (container.clientWidth === 0 && tries < 20) { tries++; requestAnimationFrame(place); return; }
-      var saved = STATE.txCalendarScrollLeft;
-      if (saved !== null) {
-        container.scrollLeft = saved;
+      if (STATE[key] !== null) {
+        container.scrollLeft = STATE[key];
       } else {
-        var cell = container.querySelector('[data-date="' + todayYmd() + '"]');
-        if (cell) {
-          var cellLeft = cell.getBoundingClientRect().left - container.getBoundingClientRect().left + container.scrollLeft;
-          container.scrollLeft = Math.max(0, cellLeft - (container.clientWidth - cell.offsetWidth) / 2);
-        } else {
-          container.scrollLeft = container.scrollWidth;
-        }
-        if (container.clientWidth > 0) STATE.txCalendarScrollLeft = container.scrollLeft;
+        container._userScrolled = false; // rolagem programática abaixo não conta como do usuário
+        center();
       }
       requestAnimationFrame(function () {
         requestAnimationFrame(function () {
-          container.onscroll = function () { STATE.txCalendarScrollLeft = container.scrollLeft; };
+          container.onscroll = function () { if (container._userScrolled) STATE[key] = container.scrollLeft; };
         });
       });
     }
     place();
+    if (STATE[key] === null) {
+      [120, 500].forEach(function (ms) {
+        setTimeout(function () {
+          if (container.isConnected && STATE[key] === null && !container._userScrolled && container.clientWidth > 0) center();
+        }, ms);
+      });
+    }
+  }
+
+  var txCalendarScope_ = 'extrato'; // 'extrato' | 'home' -- qual tela está desenhando o Resumo agora (ver buildTxCalendarHtml_)
+
+  /** Liga o cabeçalho (abre/fecha), a rolagem por arrasto e desenha o conteúdo do Resumo da tela. */
+  function wireTxCalendarCard_(scope) {
+    txCalendarScope_ = scope;
+    var expKey = scope === 'home' ? 'homeCalendarExpanded' : 'txCalendarExpanded';
+    document.getElementById('tx-calendar-header').onclick = function () {
+      STATE[expKey] = !STATE[expKey];
+      document.getElementById('tx-calendar-collapse').style.gridTemplateRows = STATE[expKey] ? '1fr' : '0fr';
+      document.getElementById('tx-calendar-chevron').style.transform = 'rotate(' + (STATE[expKey] ? '180deg' : '0deg') + ')';
+    };
+    // 1 vez só aqui (não em renderTxCalendarWeeks_, chamada a cada filtro) -- o container persiste
+    // entre filtros, só o conteúdo dele é redesenhado.
+    var wrap = document.getElementById('tx-calendar-weeks-wrap');
+    // Só estes gestos contam como "rolou à mão" (ver positionTxCalendarScroll_).
+    ['touchstart', 'mousedown', 'wheel'].forEach(function (ev) {
+      wrap.addEventListener(ev, function () { wrap._userScrolled = true; }, { passive: true });
+    });
+    setupCalendarDragScroll_(wrap);
+    renderTxCalendar_();
   }
 
   /** Chamada pelo primeiro render do Extrato e sempre que os filtros mudam (ver
@@ -7051,11 +7219,13 @@
    *  overflow-x:auto nele mesmo (não um viewport à parte) -- é o único elemento que
    *  precisa rolar; a legenda "D S T Q Q S S" fica sticky dentro dele (ver .week-cal-legend,
    *  Stylesheet.html), não precisa de nenhum wrapper extra. */
-  function buildTxCalendarHtml_() {
-    var expanded = STATE.txCalendarExpanded;
+  function buildTxCalendarHtml_(scope) {
+    txCalendarScope_ = scope || 'extrato';
+    var home = txCalendarScope_ === 'home';
+    var expanded = home ? STATE.homeCalendarExpanded : STATE.txCalendarExpanded;
     // Título + valores filtrados lado a lado (mesma estrutura do cabeçalho de "Filtrar
     // lançamentos" -- ver renderTransactions_ -- só que sem cápsulas, é texto corrido).
-    return '<div class="card tx-calendar-card">' +
+    return '<div class="card tx-calendar-card' + (home ? ' tx-calendar-home' : '') + '">' +
       '<div id="tx-calendar-header" style="display:flex;justify-content:space-between;align-items:center;cursor:pointer;gap:8px">' +
         '<div style="display:flex;align-items:center;gap:8px;min-width:0;flex:1">' +
           '<h2 style="margin:0;flex-shrink:0">Resumo</h2>' +
@@ -13155,6 +13325,9 @@
 
   // ---------- motor genérico de "segure 0.5s pra revelar um mini-menu" ----------
   var HOLD_REVEAL_DELAY_MS = 500;
+  // Toque longo no celular (barra de orçamento, pinos): 200 ms (pedido do usuário -- na prática o antigo 500 ms
+  // parecia quase 1 s). O "+" fica de fora (ver setupHoldToReveal_ no botão flutuante).
+  var HOLD_REVEAL_TOUCH_MS = 200;
   var HOLD_REVEAL_LEAVE_GRACE_MS = 150;
   var HOLD_REVEAL_MOVE_TOLERANCE_PX = 10;
   // Handle do mini-menu hold-to-reveal aberto agora, se algum (ex: dropdown de uma
@@ -13190,12 +13363,11 @@
    */
   function setupHoldToReveal_(anchorEl, options) {
     options = options || {};
-    // O toque longo fica em HOLD_REVEAL_DELAY_MS por padrão de propósito: com 200ms, um
-    // toque normal no "+" (que deve abrir o Novo lançamento) já contaria como toque
-    // longo e abriria o menu no lugar da ação. Só a barra lateral baixa isso
-    // (touchDelayMs), porque lá o toque rápido só troca de aba.
+    // Toque longo = 200 ms por padrão (HOLD_REVEAL_TOUCH_MS). O "+" passa touchDelayMs maior de
+    // propósito: um toque normal nele (que deve abrir o Novo lançamento) não pode virar toque longo
+    // e abrir o menu no lugar da ação.
     var hoverDelay = options.hoverDelayMs || HOLD_REVEAL_DELAY_MS;
-    var touchDelay = options.touchDelayMs || HOLD_REVEAL_DELAY_MS;
+    var touchDelay = options.touchDelayMs || HOLD_REVEAL_TOUCH_MS;
     var leaveGrace = options.leaveGraceMs || HOLD_REVEAL_LEAVE_GRACE_MS;
     var isOpen = false;
     var revealTimer = null;
@@ -13330,7 +13502,7 @@
     // Menu do "+" abre e fecha bem mais rápido que o padrão (as barras de orçamento
     // seguem em 500ms): é um menu que o usuário abre de propósito e várias vezes ao dia,
     // não uma informação extra que aparece se ele parar por cima sem querer.
-    var hold = setupHoldToReveal_(fab, { hoverDelayMs: 200, leaveGraceMs: 100 });
+    var hold = setupHoldToReveal_(fab, { hoverDelayMs: 200, touchDelayMs: HOLD_REVEAL_DELAY_MS, leaveGraceMs: 100 });
     fabHold_ = hold;
 
     var root = document.createElement('div');
