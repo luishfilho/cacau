@@ -705,9 +705,9 @@
   .modal-backdrop.modal-center .modal { max-width: 400px; border-radius: 20px; max-height: 88vh; }
   .tree-modal { text-align: center; }
   .tree-modal h2 { margin: 0 0 2px; }
-  .tree-img-wrap { height: 190px; display: flex; align-items: center; justify-content: center; margin: 4px 0 6px; }
+  .tree-img-wrap { height: min(300px, 40vh); display: flex; align-items: center; justify-content: center; margin: 4px 0 6px; }
   .tree-art { position: relative; display: inline-block; line-height: 0; transform-origin: 50% 92%; animation: tree-sway 6s ease-in-out infinite; }
-  .tree-art img { max-height: 190px; max-width: 100%; transition: filter .4s ease; }
+  .tree-art img { max-height: min(300px, 40vh); max-width: 100%; transition: filter .4s ease; }
   /* Balanço: a árvore inteira inclina um pouco em volta da base (--sway = amplitude do estágio). */
   @keyframes tree-sway { 0%, 100% { transform: rotate(calc(var(--sway, 1deg) * -1)); } 50% { transform: rotate(var(--sway, 1deg)); } }
   /* Semente e broto não balançam: respiram. */
@@ -756,7 +756,7 @@
   .tree-bar > span { display: block; height: 100%; border-radius: 5px; background: var(--primary); transition: width .4s ease; }
   /* Linha do tempo dos estágios (treeTimelineHtml_): rolagem lateral; cada etapa é uma coluna posicionada pelo tempo médio. */
   /* Sem barra de rolagem: rola arrastando com o mouse (treeSetupTimelineDrag_), por toque ou shift+roda. */
-  .tree-tl-scroll { overflow-x: auto; margin: 14px -4px 4px; -webkit-overflow-scrolling: touch; scrollbar-width: none; cursor: grab; user-select: none; -webkit-user-select: none; }
+  .tree-tl-scroll { overflow-x: auto; margin: 8px -4px 4px; padding-top: 8px; -webkit-overflow-scrolling: touch; scrollbar-width: none; cursor: grab; user-select: none; -webkit-user-select: none; }
   .tree-tl-scroll::-webkit-scrollbar { display: none; }
   .tree-tl-scroll.dragging { cursor: grabbing; }
   .tree-tl-scroll img { -webkit-user-drag: none; pointer-events: none; }
@@ -775,10 +775,6 @@
   .tree-tl-name { font-size: 11px; line-height: 1.2; }
   .tree-tl-sub { font-size: 10.5px; line-height: 1.3; color: var(--text-muted); }
   .tree-tl-item:not(.reached) .tree-tl-name { color: var(--text-muted); font-weight: 600; }
-  .tree-facts { text-align: left; margin: 14px 0 12px; border-top: 1px solid var(--border); }
-  .tree-facts > div { display: flex; justify-content: space-between; gap: 12px; padding: 7px 0; border-bottom: 1px solid var(--border); font-size: 14px; }
-  .tree-facts > div > span:first-child { color: var(--text-muted); }
-  .tree-facts b { font-variant-numeric: tabular-nums; text-align: right; }
   .tree-note { font-size: 13px; padding: 8px 10px; border-radius: 10px; background: color-mix(in srgb, var(--primary) 12%, transparent); margin-top: 8px; text-align: left; }
 
   /* Janela de configuração (engrenagem, ver openSettingsModal_ em JavaScript.html). */
@@ -1432,14 +1428,9 @@
   .budget-switch input:checked { background: var(--primary); }
   .budget-switch input:checked::after { transform: translateX(16px); }
   .budget-start-row { display: flex; align-items: center; gap: 8px; margin-bottom: 10px; }
-  .budget-start-step { position: relative; flex: 0 0 auto; width: 38px; height: 38px; padding: 0; border-radius: 50%; font-size: 0; line-height: 1; }
-  /* − + ‹ › desenhados com pseudo-elementos: ficam exatamente no centro do botão (o glifo de texto nunca fica). */
-  .bs-minus::before, .bs-plus::before, .bs-plus::after { content: ''; position: absolute; left: 50%; top: 50%; background: currentColor; border-radius: 1px; transform: translate(-50%, -50%); }
-  .bs-minus::before, .bs-plus::before { width: 12px; height: 2px; }
-  .bs-plus::after { width: 2px; height: 12px; }
-  .bs-prev::before, .bs-next::before { content: ''; position: absolute; left: 50%; top: 50%; width: 8px; height: 8px; box-sizing: border-box; }
-  .bs-prev::before { border-left: 2px solid currentColor; border-bottom: 2px solid currentColor; transform: translate(-30%, -50%) rotate(45deg); }
-  .bs-next::before { border-right: 2px solid currentColor; border-top: 2px solid currentColor; transform: translate(-70%, -50%) rotate(45deg); }
+  .budget-start-step { flex: 0 0 auto; display: flex; align-items: center; justify-content: center; width: 38px; height: 38px; padding: 0; border-radius: 50%; line-height: 0; }
+  /* − + ‹ › são SVG (ver BUDGET_STEP_ICONS_), centralizados pelo flex do botão. */
+  .budget-start-step svg { display: block; width: 20px; height: 20px; fill: none; stroke: currentColor; stroke-width: 2.2; stroke-linecap: round; stroke-linejoin: round; pointer-events: none; }
   .budget-first-head { display: flex; justify-content: space-between; align-items: center; gap: 12px; min-height: 34px; }
   .budget-first-head > label { margin-bottom: 0; }
   .budget-from-start { flex: 0 0 auto; padding: 4px 12px; font-size: 12px; white-space: nowrap; }
@@ -7880,6 +7871,15 @@
   // (janela móvel) está guardada na tag git reserva-orcamento-ultimos-dias.
   var BUDGET_CYCLE_MAX_ = { day: 999, week: 104, month: 60 };
   var BUDGET_AMOUNT_MAX_ = 999999999;   // o campo de valor aceita 9 dígitos (setupIntMoneyInput_)
+  // Ícones dos botões − + ‹ › do menu de orçamento: SVG com o desenho simétrico em volta do centro (12,12) da caixa,
+  // centralizado por flex no botão. O glifo de texto nunca ficava no meio (depende da fonte); pseudo-elementos
+  // girados também borravam em alguns aparelhos.
+  var BUDGET_STEP_ICONS_ = {
+    minus: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 12h12"/></svg>',
+    plus: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 12h12M12 6v12"/></svg>',
+    prev: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M15 6l-6 6 6 6"/></svg>',
+    next: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 6l6 6-6 6"/></svg>'
+  };
   var BUDGET_AMOUNT_STEP_ = 50;         // passo dos botões − e + do valor
   var BUDGET_CYCLE_FALLBACK_ANCHOR_ = '2023-12-31'; // domingo -- só pra linha sem CreatedAt
   var BUDGET_REFERENCE_MONTH_DAYS_ = 30; // taxa de referência do toggle "ajustar pelos dias do mês"
@@ -11887,7 +11887,7 @@
         '<div class="budget-first-head"><label>Ciclo</label>' +
           '<button type="button" class="secondary budget-from-start" id="b-cycle-sug" style="display:none"></button></div>' +
         '<div class="budget-stepper">' +
-        '<button type="button" class="secondary budget-start-step bs-minus" id="b-cycle-minus" aria-label="Diminuir o ciclo em 1"></button>' +
+        '<button type="button" class="secondary budget-start-step bs-minus" id="b-cycle-minus" aria-label="Diminuir o ciclo em 1">' + BUDGET_STEP_ICONS_.minus + '</button>' +
         '<div class="budget-cycle-capsule" id="b-cycle-cap">' +
           '<input id="b-cycle-count" type="text" inputmode="numeric" maxlength="3" autocomplete="off" aria-label="Quantidade">' +
           '<div class="budget-cycle-wheel" id="b-cycle-wheel" tabindex="0" role="listbox" aria-label="Unidade do ciclo (role para trocar)">' +
@@ -11896,7 +11896,7 @@
             '<button type="button" class="budget-wheel-item" data-o="1" tabindex="-1"></button>' +
           '</div>' +
         '</div>' +
-        '<button type="button" class="secondary budget-start-step bs-plus" id="b-cycle-plus" aria-label="Aumentar o ciclo em 1"></button>' +
+        '<button type="button" class="secondary budget-start-step bs-plus" id="b-cycle-plus" aria-label="Aumentar o ciclo em 1">' + BUDGET_STEP_ICONS_.plus + '</button>' +
         '</div>' +
         '<div class="muted budget-slot budget-ideal" id="b-ideal"></div>' +
       '</div>' +
@@ -11905,9 +11905,9 @@
           '<button type="button" class="secondary budget-from-start" id="b-amount-sug" style="display:none"></button></div>' +
         '<div class="budget-value-row' + (showModeToggle ? ' has-mode' : '') + '">' +
           '<div class="budget-stepper">' +
-            '<button type="button" class="secondary budget-start-step bs-minus" id="b-amount-minus" aria-label="Diminuir o valor em R$ 50"></button>' +
+            '<button type="button" class="secondary budget-start-step bs-minus" id="b-amount-minus" aria-label="Diminuir o valor em R$ 50">' + BUDGET_STEP_ICONS_.minus + '</button>' +
             '<div id="b-amount-field"></div>' +
-            '<button type="button" class="secondary budget-start-step bs-plus" id="b-amount-plus" aria-label="Aumentar o valor em R$ 50"></button>' +
+            '<button type="button" class="secondary budget-start-step bs-plus" id="b-amount-plus" aria-label="Aumentar o valor em R$ 50">' + BUDGET_STEP_ICONS_.plus + '</button>' +
           '</div>' +
           '<div class="budget-value-side">' +
             (showModeToggle
@@ -11927,10 +11927,10 @@
         '<div class="budget-first-head"><label>Primeiro ciclo</label>' +
           '<button type="button" class="secondary budget-from-start" id="b-from-start" aria-pressed="false">Desde o início</button></div>' +
         '<div class="budget-start-row">' +
-          '<button type="button" class="secondary budget-start-step bs-prev" id="b-start-prev" aria-label="Primeiro ciclo anterior"></button>' +
+          '<button type="button" class="secondary budget-start-step bs-prev" id="b-start-prev" aria-label="Primeiro ciclo anterior">' + BUDGET_STEP_ICONS_.prev + '</button>' +
           '<div class="budget-start-date"><span id="b-start-text"></span>' +
             '<input type="date" id="b-start-date" aria-label="Escolher o primeiro ciclo"></div>' +
-          '<button type="button" class="secondary budget-start-step bs-next" id="b-start-next" aria-label="Primeiro ciclo seguinte"></button>' +
+          '<button type="button" class="secondary budget-start-step bs-next" id="b-start-next" aria-label="Primeiro ciclo seguinte">' + BUDGET_STEP_ICONS_.next + '</button>' +
         '</div>' +
         '<label class="budget-preview-title">Prévia</label>' +
         '<div class="budget-preview-slot"><div id="b-preview"></div><div class="muted budget-preview-note" id="b-preview-note"></div></div>' +
@@ -14871,8 +14871,7 @@
     var span = view.nextAt === null ? 1 : view.nextAt - view.stageStart;
     var pct = view.nextAt === null ? 100 : Math.max(0, Math.min(100, ((view.points - view.stageStart) / span) * 100));
     var html = '<div class="tree-modal" id="tree-modal">' +
-      '<h2>Meu cacaueiro</h2>' +
-      '<div class="muted">Estágio ' + view.stage + ' de ' + view.stageCount + ' · ' + escapeHtml(stage.name) + (view.dryLevel ? ' (' + TREE_DRY_LABELS_[view.dryLevel] + ')' : '') + '</div>' +
+      '<h2>Meu cacau</h2>' +
       '<div class="tree-img-wrap" data-key="' + file + '|' + treeImageFilter_(view) + '|' + view.stage + '|' + view.dryLevel + '"><div class="' + treeArtClass_(view) + '" style="--sway:' + treeSway_(view) + '">' +
         '<img id="tree-img"' + (changed ? ' class="tree-cur-fade"' : '') + ' alt="' + escapeHtml(stage.name) + '" src="' + treeImgSrc_(file) + '" style="filter:' + treeImageFilter_(view) + '">' +
         (changed ? '<img class="tree-prev" alt="" src="' + treeImgSrc_(prevFile) + '">' : '') +
@@ -14886,21 +14885,7 @@
         ' pontos para ela se recuperar; enquanto isso os pontos novos vão para a recuperação e não para o crescimento.</div>';
     }
     html += treeTimelineHtml_(view);
-    html += '<div class="tree-facts">' +
-      '<div><span>Pontos no total</span><b>' + treePts_(view.points) + '</b></div>' +
-      '<div><span>Hoje</span><b>' + (view.todayBase === 3 ? 'abriu o app e lançou (3)' : 'abriu o app (1)') + ' × ' + treeFmt_(view.todayMult, 2) + ' = ' + treePts_(view.todayPoints, 'round') + ' pontos</b></div>' +
-      '<div><span>Multiplicador (saúde financeira)</span><b>' + treeFmt_(view.todayMult, 2) + 'x</b></div>';
-    if (health && health.budgetsTotal > 0) {
-      html += '<div><span>Orçamentos dentro do teto</span><b>' + health.budgetsWithin + ' de ' + health.budgetsTotal + '</b></div>';
-    }
-    if (health && health.spentPrev > 0) {
-      var diff = Math.round((health.spentNow / health.spentPrev - 1) * 100);
-      html += '<div><span>Gastos até hoje vs. mês anterior</span><b>' + (diff > 0 ? '+' : diff < 0 ? '−' : '') + Math.abs(diff) + '%</b></div>';
-    }
-    html += '<div><span>Dias de uso</span><b>' + view.openDays + ' (' + view.entryDays + ' com lançamento)</b></div>' +
-      '</div>' +
-      '<div class="muted" style="font-size:12px;margin-bottom:12px">Cada dia com o app aberto vale 1 ponto e cada dia com lançamento vale 3. A saúde financeira multiplica os pontos do dia por até 2. Depois de 7 dias sem abrir, a árvore começa a secar.</div>' +
-      '<button type="button" id="tree-close" style="width:100%">Fechar</button></div>';
+    html += '<button type="button" id="tree-close" style="width:100%;margin-top:14px">Fechar</button></div>';
     return html;
   }
   function renderTreeModal_() {
@@ -14924,14 +14909,14 @@
     document.getElementById('tree-close').onclick = closeModal;
   }
   function openTreeModal_() {
-    openModal('<div class="tree-modal" id="tree-modal"><h2>Meu cacaueiro</h2><div class="muted">Carregando...</div></div>');
+    openModal('<div class="tree-modal" id="tree-modal"><h2>Meu cacau</h2><div class="muted">Carregando...</div></div>');
     document.getElementById('modal-backdrop').classList.add('modal-center');
     if (treeState_) renderTreeModal_();
     treeTouch_(false).then(function () {
       if (document.getElementById('tree-modal')) renderTreeModal_();
     }).catch(function (err) {
       var el = document.getElementById('tree-modal');
-      if (el && !treeState_) el.innerHTML = '<h2>Meu cacaueiro</h2><div class="muted">Não consegui carregar agora: ' + escapeHtml(err && err.message || 'erro') + '</div><button type="button" onclick="closeModal()" style="width:100%;margin-top:12px">Fechar</button>';
+      if (el && !treeState_) el.innerHTML = '<h2>Meu cacau</h2><div class="muted">Não consegui carregar agora: ' + escapeHtml(err && err.message || 'erro') + '</div><button type="button" onclick="closeModal()" style="width:100%;margin-top:12px">Fechar</button>';
     });
   }
 
