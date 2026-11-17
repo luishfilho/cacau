@@ -124,6 +124,10 @@
 
   /* Sem o quadrado azul translúcido que o Android desenha por um instante no elemento tocado. */
   * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+  /* Texto de menus, linhas e botões não seleciona (segurar o dedo é a ação de "hover" no celular e, às vezes,
+     selecionava o texto junto); só os campos de digitação continuam selecionáveis. */
+  body { -webkit-user-select: none; user-select: none; -webkit-touch-callout: none; }
+  input, textarea, select, [contenteditable="true"] { -webkit-user-select: text; user-select: text; -webkit-touch-callout: default; }
 
   /* Reserva o espaço da barra de rolagem sempre, mesmo em telas curtas que não
      precisam rolar — sem isso, elementos centralizados com left:50% (tabbar, FAB,
@@ -15816,9 +15820,22 @@
       var touch = /Android|iPhone|iPad|Mobile/i.test(navigator.userAgent || '');
       if (!window.FinancasApp && !standalone && !touch) return;
       if (!window.history || !history.pushState) return;
-      history.replaceState({ cacauBase: true }, '');
-      history.pushState({ cacauGuard: true }, '');
+      // A guarda só pode ser empilhada DEPOIS de um toque/tecla do usuário: entradas de histórico criadas sem
+      // interação são marcadas como "puláveis" (intervenção anti-armadilha do Chrome/WebView), o voltar pula a
+      // guarda e fecha o app do mesmo jeito. Com a primeira interação a página ganha ativação "pegajosa" e as
+      // reposições seguintes (dentro do popstate) valem.
+      var armed = false;
+      var ARM_EVENTS = ['pointerup', 'touchend', 'click', 'keydown'];
+      function arm_() {
+        if (armed) return;
+        armed = true;
+        ARM_EVENTS.forEach(function (t) { document.removeEventListener(t, arm_, true); });
+        history.replaceState({ cacauBase: true }, '');
+        history.pushState({ cacauGuard: true }, '');
+      }
+      ARM_EVENTS.forEach(function (t) { document.addEventListener(t, arm_, true); });
       window.addEventListener('popstate', function () {
+        if (!armed) return;
         history.pushState({ cacauGuard: true }, '');
         var ev;
         try { ev = new KeyboardEvent('keydown', { key: 'Escape', code: 'Escape', bubbles: true, cancelable: true }); }
