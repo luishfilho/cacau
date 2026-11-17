@@ -1324,11 +1324,6 @@
   }
   .time-pin-label.flip { transform: translateX(calc(-100% - 10px)); }
 
-  /* Sugestões de orçamento novo (ver buildBudgetTimelineHtml): texto simples + botão "Criar", sem barra. */
-  .budget-suggest-head { font-size: 12px; margin: 10px 0 2px; }
-  .budget-suggest-row { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 4px 0; }
-  .budget-suggest-text { flex: 1 1 auto; min-width: 0; font-size: 13px; }
-  .budget-suggest-btn { flex: 0 0 auto; padding: 4px 14px; font-size: 12px; }
   /* Plano de recuperação de estouro (ver budgetRecoveryState_): uma linha pequena colada
      embaixo da barra, "Economizando até dia ..." -- puxada pra cima pra encostar na
      barra (a margem de baixo dela é 6px) e devolver o respiro no fim. */
@@ -1394,11 +1389,11 @@
   /* Modal de orçamento. O tamanho NUNCA muda ao clicar/digitar: toda área que se atualiza
      (.budget-slot, a prévia, o interruptor do valor) tem altura reservada. */
   .budget-cycle-capsule { display: inline-flex; align-items: center; height: 56px; margin-bottom: 4px; border: 1px solid var(--border); border-radius: 28px; background: var(--surface); overflow: hidden; }
-  .budget-cycle-capsule input { width: 56px; height: 100%; margin: 0; padding: 0 4px 0 16px; box-sizing: border-box; border: none; border-radius: 0; background: transparent; text-align: right; font: inherit; font-size: 18px; font-weight: 600; line-height: 22px; color: var(--text); }
+  .budget-cycle-capsule input { width: 50px; height: 100%; margin: 0; padding: 0 4px 0 16px; box-sizing: border-box; border: none; border-radius: 0; background: transparent; text-align: right; font: inherit; font-size: 18px; font-weight: 600; line-height: 22px; color: var(--text); }
   .budget-cycle-capsule input:focus { outline: none; }
   /* Mostrador vertical (estilo relógio/iOS): 3 itens de 22px (passo 22), o do meio inteiro e os vizinhos cortados e
      esmaecidos pela máscara. Largura/altura fixas: trocar a unidade nunca muda o tamanho do menu. */
-  .budget-cycle-wheel { position: relative; flex: 0 0 auto; width: 112px; height: 100%; overflow: hidden; cursor: ns-resize; touch-action: none; outline: none; -webkit-mask-image: linear-gradient(to bottom, transparent 0, rgba(0,0,0,.7) 10%, #000 28%, #000 72%, rgba(0,0,0,.7) 90%, transparent 100%); mask-image: linear-gradient(to bottom, transparent 0, rgba(0,0,0,.7) 10%, #000 28%, #000 72%, rgba(0,0,0,.7) 90%, transparent 100%); }
+  .budget-cycle-wheel { position: relative; flex: 0 0 auto; width: 94px; height: 100%; overflow: hidden; cursor: ns-resize; touch-action: none; outline: none; -webkit-mask-image: linear-gradient(to bottom, transparent 0, rgba(0,0,0,.7) 10%, #000 28%, #000 72%, rgba(0,0,0,.7) 90%, transparent 100%); mask-image: linear-gradient(to bottom, transparent 0, rgba(0,0,0,.7) 10%, #000 28%, #000 72%, rgba(0,0,0,.7) 90%, transparent 100%); }
   .budget-wheel-item { position: absolute; left: 0; top: 16px; width: 100%; height: 22px; margin: 0; padding: 0 12px 0 6px; box-sizing: border-box; border: none; border-radius: 0; background: transparent; box-shadow: none; color: var(--text); font: inherit; font-size: 14px; line-height: 22px; text-align: left; white-space: nowrap; opacity: 0.55; cursor: pointer; }
   .budget-wheel-item[data-o="0"] { opacity: 1; font-size: 18px; font-weight: 600; cursor: default; }
   .budget-cycle-wheel:focus-visible { box-shadow: inset 0 0 0 2px var(--primary); border-radius: 0 28px 28px 0; }
@@ -1413,10 +1408,18 @@
   .budget-from-start.active { background: var(--primary); border-color: var(--primary); color: #fff; }
   .budget-typical { font-size: 12px; margin-top: 0; }
   /* − campo + : botões redondos dos lados do ciclo e do valor. */
-  .budget-stepper { display: flex; align-items: center; gap: 8px; }
+  .budget-stepper { display: flex; align-items: center; gap: 6px; flex: 0 0 auto; }
   .budget-stepper .budget-cycle-capsule { margin-bottom: 0; }
-  .budget-stepper #b-amount-field { flex: 1 1 auto; min-width: 0; }
-  .budget-stepper #b-amount-field input { margin: 0; }
+  /* Campo do valor: mesma cápsula do ciclo (altura 56, cantos de 28), texto centralizado; os toggles ficam à direita. */
+  .budget-stepper #b-amount-field { flex: 0 0 auto; width: 144px; }
+  .budget-stepper #b-amount-field input { width: 100%; height: 56px; margin: 0; padding: 0 12px; box-sizing: border-box; border: 1px solid var(--border); border-radius: 28px; background: var(--surface); text-align: center; font: inherit; font-size: 18px; font-weight: 600; color: var(--text); }
+  .budget-stepper #b-amount-field input:disabled { font-size: 13px; opacity: 1; -webkit-text-fill-color: var(--text); }
+  .budget-value-row { display: flex; align-items: center; gap: 8px; min-height: 64px; }
+  .budget-value-row.has-mode { min-height: 112px; }
+  .budget-value-side { flex: 1 1 auto; min-width: 0; display: flex; flex-direction: column; gap: 8px; }
+  .budget-value-side .kind-toggle { flex-direction: column; gap: 4px; margin: 0; }
+  .budget-value-side .kind-toggle button { padding: 4px 0; font-size: 10px; white-space: nowrap; overflow: hidden; }
+  .budget-value-side .budget-switch { flex-direction: column-reverse; align-items: flex-start; justify-content: flex-end; gap: 3px; min-height: 0; margin: 0; font-size: 10px; line-height: 1.2; }
   .budget-start-step:disabled { opacity: 0.4; cursor: default; }
   .budget-switch { display: flex; align-items: center; justify-content: space-between; gap: 8px; min-height: 28px; margin: 8px 0 0; font-size: 11px; line-height: 1.25; cursor: pointer; }
   .budget-switch.is-hidden { visibility: hidden; pointer-events: none; }
@@ -1425,7 +1428,14 @@
   .budget-switch input:checked { background: var(--primary); }
   .budget-switch input:checked::after { transform: translateX(16px); }
   .budget-start-row { display: flex; align-items: center; gap: 8px; margin-bottom: 10px; }
-  .budget-start-step { flex: 0 0 auto; width: 38px; height: 38px; padding: 0; border-radius: 50%; font-size: 18px; line-height: 1; }
+  .budget-start-step { position: relative; flex: 0 0 auto; width: 38px; height: 38px; padding: 0; border-radius: 50%; font-size: 0; line-height: 1; }
+  /* − + ‹ › desenhados com pseudo-elementos: ficam exatamente no centro do botão (o glifo de texto nunca fica). */
+  .bs-minus::before, .bs-plus::before, .bs-plus::after { content: ''; position: absolute; left: 50%; top: 50%; background: currentColor; border-radius: 1px; transform: translate(-50%, -50%); }
+  .bs-minus::before, .bs-plus::before { width: 12px; height: 2px; }
+  .bs-plus::after { width: 2px; height: 12px; }
+  .bs-prev::before, .bs-next::before { content: ''; position: absolute; left: 50%; top: 50%; width: 8px; height: 8px; box-sizing: border-box; }
+  .bs-prev::before { border-left: 2px solid currentColor; border-bottom: 2px solid currentColor; transform: translate(-30%, -50%) rotate(45deg); }
+  .bs-next::before { border-right: 2px solid currentColor; border-top: 2px solid currentColor; transform: translate(-70%, -50%) rotate(45deg); }
   .budget-first-head { display: flex; justify-content: space-between; align-items: center; gap: 12px; min-height: 34px; }
   .budget-first-head > label { margin-bottom: 0; }
   .budget-from-start { flex: 0 0 auto; padding: 4px 12px; font-size: 12px; white-space: nowrap; }
@@ -7984,7 +7994,7 @@
     STATE.allTransactions.forEach(function (t) {
       if (t.kind !== 'expense' || categoryIds.indexOf(t.categoryId) === -1 || t.excludeFromAnalysis || t.forecastId) return;
       var effDate = budgetEffectiveDate_(t);
-      if (effDate) out.push({ d: effDate, v: netAmountOfPassiveForBudget_(t) });
+      if (effDate) out.push({ d: effDate, v: netAmountOfPassiveForBudget_(t), inst: Number(t.installmentTotal || 1) > 1 });
     });
     return out;
   }
@@ -8397,10 +8407,12 @@
       days: Math.max(1, Math.ceil(median)), weeks: Math.max(1, Math.ceil(median / 7)), months: Math.max(1, Math.ceil(median / 30))
     };
   }
-  /** Início do histórico das categorias: data do lançamento mais antigo (spends = [{ d }]) ou null. */
+  /** Início do histórico das categorias: data do lançamento mais antigo (spends = [{ d }]) ou null. Compras
+   *  parceladas ficam de fora: uma fatura importada cria parcelas em meses bem anteriores ao uso real do app e
+   *  puxaria o "Desde o início" pra uma data anômala (elas continuam contando no gasto, só não marcam o início). */
   function budgetOldestSpendYmd_(spends) {
     var oldest = null;
-    (spends || []).forEach(function (s) { if (s.d && (!oldest || s.d < oldest)) oldest = s.d; });
+    (spends || []).forEach(function (s) { if (!s.inst && s.d && (!oldest || s.d < oldest)) oldest = s.d; });
     return oldest;
   }
   /** Início padrão de um orçamento novo: começo do ciclo em andamento (mês: dia 1; semana: domingo; dia: hoje). */
@@ -9007,9 +9019,8 @@
    * cada render, então os listeners de uma rodada anterior ficam presos a elementos já
    * descartados (mesmo padrão de todo outro wiring pós-innerHTML deste app). Barras de
    * orçamento de verdade: resumo + (com plano de recuperação ativo) "Dispensar plano" +
-   * "Editar orçamento" (o Geral é uma linha como as outras, só que o editar não tem categorias);
-   * o botão "Criar" de uma sugestão de orçamento NOVO abre o modal com a sugestão anexada, pronta
-   * pra revisar/confirmar ou descartar.
+   * "Editar orçamento" (o Geral é uma linha como as outras, só que o editar não tem categorias).
+   * (Sugestões de orçamento NOVO ficam só no Planejamento, com Confirmar / Descartar.)
    */
   function setupBudgetBarMenus_(root) {
     function findBudget_(id) { return STATE.budgets.find(function (x) { return x.id === id; }); }
@@ -9031,18 +9042,6 @@
         var b = findBudget_(budgetId);
         if (b) viewBudgetTransactions_(b);
       });
-    });
-
-    // Sugestão de orçamento novo: texto + botão "Criar" (sem barra) -- abre o modal já preenchido,
-    // pronto pra revisar/confirmar ou descartar.
-    var newSuggestions = computeBudgetSuggestions_();
-    root.querySelectorAll('[data-budget-suggest]').forEach(function (btn) {
-      var categoryId = btn.dataset.budgetSuggest;
-      btn.onclick = function () {
-        var s = newSuggestions.find(function (x) { return x.categoryId === categoryId; });
-        if (!s) return;
-        openBudgetModal(null, { suggestion: budgetNewSuggestionForModal_(s) });
-      };
     });
   }
   /** Gasto do mês inteiro (dia 1 ao último) das categorias, contra `limit` já proporcional
@@ -9129,15 +9128,12 @@
    * computeBudgetRangeAdvisory_) à direita do último círculo (quebra pra baixo em tela
    * estreita). A PRIMEIRA linha é o orçamento Geral (todas as despesas, ver
    * budgetWithEffectiveCategories_). Com plano de recuperação ativo (ver budgetRecoveryState_) o círculo
-   * usa o teto de economia e uma linha logo abaixo diz até quando. As sugestões de orçamento novo ficam
-   * no fim, em texto simples com um botão "Criar".
+   * usa o teto de economia e uma linha logo abaixo diz até quando.
    */
   function buildBudgetTimelineHtml(d) {
     var activeBudgets = STATE.budgets.filter(function (b) { return !b.archived && !b.isUnbudgetedCatchAll; }).sort(byBudgetCategoryNamePt_);
     var geralBudget = STATE.budgets.find(function (b) { return b.isUnbudgetedCatchAll && !b.archived; });
-    // Sugestão de orçamento NOVO (ver computeBudgetSuggestions_) -- card aparece mesmo
-    // sem NENHUM orçamento de verdade ainda, contanto que haja pelo menos 1 sugestão.
-    var newBudgetSuggestions = computeBudgetSuggestions_();
+    // Sugestões de orçamento NOVO não aparecem aqui: ficam só no Planejamento (Confirmar / Descartar).
 
     // Cada orçamento segue o PRÓPRIO ciclo (sem seletor de período no card): uma linha de círculos com o
     // texto de aviso à direita do último. null = Automático sem histórico suficiente (mediana de pelo
@@ -9154,7 +9150,7 @@
     }
 
     var geralProgress = geralBudget ? progressOf_(geralBudget) : null;
-    if (!activeBudgets.length && !newBudgetSuggestions.length && !geralProgress) return '';
+    if (!activeBudgets.length && !geralProgress) return '';
 
     // Cada orçamento é uma linha de círculos (ver budgetCircleSeries_): um por ciclo fechado e o
     // último é o ciclo em andamento. Colunas fixas e iguais em todas as linhas: nome à esquerda | 8 slots de
@@ -9183,21 +9179,9 @@
       '</div>';
     }).join('');
 
-    // Sugestão de orçamento novo: SEM barra -- uma linha de texto (categoria + valor sugerido por mês) com o
-    // botão "Criar", que abre o modal já preenchido pra revisar (ver setupBudgetBarMenus_).
-    var suggestionsHtml = !newBudgetSuggestions.length ? '' :
-      '<div class="budget-suggest-head muted">Sugestões de orçamento</div>' +
-      newBudgetSuggestions.map(function (s) {
-        return '<div class="budget-suggest-row">' +
-          '<span class="budget-suggest-text">' + categoryIconHtml_(s.categoryId) + escapeHtml(s.categoryName) + ' ' +
-            '<span class="muted">· ' + escapeHtml(fmtMoneyNoCents_(s.suggestedAmount)) + ' ' + escapeHtml(budgetSuggestionCycleText_(s.suggestedCycleUnit, s.suggestedCycleCount)) + '</span></span>' +
-          '<button type="button" class="secondary budget-suggest-btn" data-budget-suggest="' + escapeHtml(s.categoryId) + '">Criar</button>' +
-        '</div>';
-      }).join('');
-
     return '<div class="card">' +
       '<h2 style="margin-bottom:10px">Orçamentos</h2>' +
-      barsHtml + suggestionsHtml +
+      barsHtml +
     '</div>';
   }
 
@@ -11899,7 +11883,7 @@
         '<div class="budget-first-head"><label>Ciclo</label>' +
           '<button type="button" class="secondary budget-from-start" id="b-cycle-sug" style="display:none"></button></div>' +
         '<div class="budget-stepper">' +
-        '<button type="button" class="secondary budget-start-step" id="b-cycle-minus" aria-label="Diminuir o ciclo em 1">−</button>' +
+        '<button type="button" class="secondary budget-start-step bs-minus" id="b-cycle-minus" aria-label="Diminuir o ciclo em 1"></button>' +
         '<div class="budget-cycle-capsule" id="b-cycle-cap">' +
           '<input id="b-cycle-count" type="text" inputmode="numeric" maxlength="3" autocomplete="off" aria-label="Quantidade">' +
           '<div class="budget-cycle-wheel" id="b-cycle-wheel" tabindex="0" role="listbox" aria-label="Unidade do ciclo (role para trocar)">' +
@@ -11908,26 +11892,30 @@
             '<button type="button" class="budget-wheel-item" data-o="1" tabindex="-1"></button>' +
           '</div>' +
         '</div>' +
-        '<button type="button" class="secondary budget-start-step" id="b-cycle-plus" aria-label="Aumentar o ciclo em 1">+</button>' +
+        '<button type="button" class="secondary budget-start-step bs-plus" id="b-cycle-plus" aria-label="Aumentar o ciclo em 1"></button>' +
         '</div>' +
         '<div class="muted budget-slot budget-ideal" id="b-ideal"></div>' +
       '</div>' +
       '<div class="field budget-value-field">' +
         '<div class="budget-first-head"><label>Valor</label>' +
           '<button type="button" class="secondary budget-from-start" id="b-amount-sug" style="display:none"></button></div>' +
-        (showModeToggle
-          ? '<div class="kind-toggle" id="b-mode-toggle" style="margin-bottom:8px">' +
-              '<button type="button" data-m="auto">Automático</button>' +
-              '<button type="button" data-m="manual">Manual</button>' +
-            '</div>'
-          : '') +
-        '<div class="budget-stepper">' +
-          '<button type="button" class="secondary budget-start-step" id="b-amount-minus" aria-label="Diminuir o valor em R$ 50">−</button>' +
-          '<div id="b-amount-field"></div>' +
-          '<button type="button" class="secondary budget-start-step" id="b-amount-plus" aria-label="Aumentar o valor em R$ 50">+</button>' +
+        '<div class="budget-value-row' + (showModeToggle ? ' has-mode' : '') + '">' +
+          '<div class="budget-stepper">' +
+            '<button type="button" class="secondary budget-start-step bs-minus" id="b-amount-minus" aria-label="Diminuir o valor em R$ 50"></button>' +
+            '<div id="b-amount-field"></div>' +
+            '<button type="button" class="secondary budget-start-step bs-plus" id="b-amount-plus" aria-label="Aumentar o valor em R$ 50"></button>' +
+          '</div>' +
+          '<div class="budget-value-side">' +
+            (showModeToggle
+              ? '<div class="kind-toggle" id="b-mode-toggle">' +
+                  '<button type="button" data-m="auto">Automático</button>' +
+                  '<button type="button" data-m="manual">Manual</button>' +
+                '</div>'
+              : '') +
+            '<label class="budget-switch" id="b-scale-wrap" title="Aumentar/diminuir em meses com mais/menos de 30 dias"><span>Pelos dias do mês</span>' +
+              '<input type="checkbox" id="b-scale" role="switch" aria-label="Aumentar/diminuir em meses com mais/menos de 30 dias"></label>' +
+          '</div>' +
         '</div>' +
-        '<label class="budget-switch" id="b-scale-wrap"><span>Aumentar/diminuir em meses com mais/menos de 30 dias</span>' +
-          '<input type="checkbox" id="b-scale" role="switch"></label>' +
         (isGeral ? '<div class="muted budget-slot" id="b-geral-note"></div>' : '') +
         '<div class="muted budget-slot budget-typical" id="b-typical"></div>' +
       '</div>' +
@@ -11935,10 +11923,10 @@
         '<div class="budget-first-head"><label>Primeiro ciclo</label>' +
           '<button type="button" class="secondary budget-from-start" id="b-from-start" aria-pressed="false">Desde o início</button></div>' +
         '<div class="budget-start-row">' +
-          '<button type="button" class="secondary budget-start-step" id="b-start-prev" aria-label="Primeiro ciclo anterior">‹</button>' +
+          '<button type="button" class="secondary budget-start-step bs-prev" id="b-start-prev" aria-label="Primeiro ciclo anterior"></button>' +
           '<div class="budget-start-date"><span id="b-start-text"></span>' +
             '<input type="date" id="b-start-date" aria-label="Escolher o primeiro ciclo"></div>' +
-          '<button type="button" class="secondary budget-start-step" id="b-start-next" aria-label="Primeiro ciclo seguinte">›</button>' +
+          '<button type="button" class="secondary budget-start-step bs-next" id="b-start-next" aria-label="Primeiro ciclo seguinte"></button>' +
         '</div>' +
         '<label class="budget-preview-title">Prévia</label>' +
         '<div class="budget-preview-slot"><div id="b-preview"></div><div class="muted budget-preview-note" id="b-preview-note"></div></div>' +
