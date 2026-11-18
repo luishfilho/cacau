@@ -2878,31 +2878,56 @@ var MIGRACAO_DESTINO_ = 'Nu Ultravioleta';
 var MIGRACAO_BACKUP_SHEET_ = 'Backup migração Nubank';
 // Os que CONTINUAM na conta Nubank. cents = valor em centavos (positivo, sem sinal);
 // kinds (opcional) distingue dois lançamentos de mesmo valor e data (salário x transferência).
+// optional: não achar nenhum não é problema (já não está na Nubank). multi: se houver mais de um
+// igual (provável duplicata), TODOS ficam e o log avisa pra você conferir.
 var MIGRACAO_FICAM_ = [
-  { label: '31/08 salário', date: '2026-08-31', cents: 887721, kinds: ['income'] },
-  { label: '31/08 transf pra 99', date: '2026-08-31', cents: 887721, kinds: ['expense', 'transfer_out'] },
+  { label: '31/08 salário', date: '2026-08-31', cents: 887721, kinds: ['income'], optional: true },
+  { label: '31/08 transf pra 99', date: '2026-08-31', cents: 887721, kinds: ['expense', 'transfer_out'], optional: true },
   { label: '06/10 R$ 58,00', date: '2026-10-06', cents: 5800 },
-  { label: '13/10 R$ 21,00', date: '2026-10-13', cents: 2100 },
-  { label: '19/10 R$ 1.000,00', date: '2026-10-19', cents: 100000 }
+  { label: '13/10 R$ 21,00', date: '2026-10-13', cents: 2100, multi: true },
+  { label: '19/10 R$ 1.000,00', date: '2026-10-19', cents: 100000, multi: true }
 ];
+
+// Planilha onde rodar. Vazio = a planilha deste projeto (a de produção do app antigo). Se o cartão
+// foi criado numa planilha do Cacau, cole aqui o ID dela (o trecho entre /d/ e /edit no link);
+// a conta que executa precisa ter acesso a ela.
+var MIGRACAO_PLANILHA_ID_ = '1qjuwdMRK0NKDBdrzH3ed021qDRnt3PxyiTEjzdMeucU';
+
+/** Aponta o app pra planilha certa nesta execução (o cache vale só enquanto ela roda). */
+function migracaoAbrirPlanilha_() {
+  if (!MIGRACAO_PLANILHA_ID_) return;
+  spreadsheetCache_ = SpreadsheetApp.openById(MIGRACAO_PLANILHA_ID_);
+  Logger.log('Planilha: ' + spreadsheetCache_.getName() + ' (' + MIGRACAO_PLANILHA_ID_ + ')');
+}
 
 function migracaoYmd_(v) {
   if (v instanceof Date) return Utilities.formatDate(v, Session.getScriptTimeZone(), 'yyyy-MM-dd');
   return String(v || '').slice(0, 10);
 }
 
-function migracaoFindAccount_(accounts, name) {
-  var found = accounts.filter(function (a) { return !isArchived_(a.Archived) && namesMatch_(a.Name, name); });
-  if (found.length !== 1) throw new Error('Esperava exatamente 1 conta ativa chamada "' + name + '" e achei ' + found.length + '.');
+// Se não houver conta com o nome exato, aceita a única conta ativa cujo nome CONTÉM este trecho.
+var MIGRACAO_DESTINO_CONTEM_ = 'ultravioleta';
+
+function migracaoFindAccount_(accounts, name, contains) {
+  var active = accounts.filter(function (a) { return !isArchived_(a.Archived); });
+  var found = active.filter(function (a) { return namesMatch_(a.Name, name); });
+  if (found.length === 0 && contains) {
+    found = active.filter(function (a) { return String(a.Name || '').toLowerCase().indexOf(contains) !== -1; });
+  }
+  if (found.length !== 1) {
+    throw new Error('Esperava exatamente 1 conta ativa chamada "' + name + '" e achei ' + found.length +
+      '. Contas ativas: ' + active.map(function (a) { return '"' + a.Name + '" (' + a.Type + ')'; }).join(', ') + '.');
+  }
   return found[0];
 }
 
 /** Monta o plano sem gravar nada: { origem, destino, keeps, moves, skipped, errors }. */
 function migracaoPlano_() {
+  migracaoAbrirPlanilha_();
   var accounts = readAll_('Accounts');
   var origem = migracaoFindAccount_(accounts, MIGRACAO_ORIGEM_);
-  var destino = migracaoFindAccount_(accounts, MIGRACAO_DESTINO_);
-  var errors = [];
+  var destino = migracaoFindAccount_(accounts, MIGRACAO_DESTINO_, MIGRACAO_DESTINO_CONTEM_);
+  var errors = [], notes = [];
   if (destino.Type !== 'credit_card') errors.push('"' + MIGRACAO_DESTINO_ + '" não é do tipo cartão de crédito.');
   if (!Number(destino.ClosingDay) || !Number(destino.DueDay)) {
     errors.push('"' + MIGRACAO_DESTINO_ + '" está sem dia de fechamento/vencimento: preencha em Editar conta antes (a fatura de cada lançamento depende disso).');
@@ -2916,9 +2941,12 @@ function migracaoPlano_() {
       if (Math.round(Math.abs(Number(t.Amount)) * 100) !== spec.cents) return false;
       return !spec.kinds || spec.kinds.indexOf(t.Kind) !== -1;
     });
-    if (matches.length !== 1) {
+    var ok = matches.length === 1 || (spec.optional && matches.length === 0) || (spec.multi && matches.length >= 1);
+    if (!ok) {
       errors.push('"' + spec.label + '": esperava 1 lançamento na conta Nubank e achei ' + matches.length + '.');
     }
+    if (matches.length === 0 && spec.optional) notes.push('"' + spec.label + '": não encontrado na conta Nubank (ok, não há nada a manter).');
+    if (matches.length > 1 && spec.multi) notes.push('"' + spec.label + '": ' + matches.length + ' lançamentos iguais, todos ficam na Nubank (confira se não é duplicata).');
     matches.forEach(function (t) { kept[t.ID] = true; keeps.push({ spec: spec.label, tx: t }); });
   });
   var moves = [], skipped = [];
@@ -2926,11 +2954,12 @@ function migracaoPlano_() {
     if (kept[t.ID]) return;
     var why = null;
     if (t.Kind === 'transfer_in' || t.Kind === 'transfer_out') why = 'transferência (mover manualmente)';
+    else if (t.Kind === 'income') why = 'receita (cartão não recebe receita, fica na Nubank)';
     else if (t.InstallmentGroupID) why = 'parcelado (mover manualmente)';
     else if (t.Description === ACCOUNT_OPENING_DESCRIPTION || t.Description === ACCOUNT_CONSOLIDATION_DESCRIPTION) why = 'saldo inicial/consolidação da conta';
     if (why) skipped.push({ tx: t, why: why }); else moves.push(t);
   });
-  return { origem: origem, destino: destino, keeps: keeps, moves: moves, skipped: skipped, errors: errors };
+  return { origem: origem, destino: destino, keeps: keeps, moves: moves, skipped: skipped, errors: errors, notes: notes };
 }
 
 function migracaoLinha_(t) {
@@ -2941,6 +2970,7 @@ function migracaoLogPlano_(p) {
   Logger.log('Origem: ' + p.origem.Name + ' | Destino: ' + p.destino.Name);
   Logger.log('--- FICAM na ' + p.origem.Name + ' (' + p.keeps.length + ') ---');
   p.keeps.forEach(function (k) { Logger.log('[' + k.spec + '] ' + migracaoLinha_(k.tx)); });
+  p.notes.forEach(function (n) { Logger.log('AVISO: ' + n); });
   Logger.log('--- NÃO movidos, conferir à mão (' + p.skipped.length + ') ---');
   p.skipped.forEach(function (s) { Logger.log('(' + s.why + ') ' + migracaoLinha_(s.tx)); });
   Logger.log('--- VÃO pro ' + p.destino.Name + ' (' + p.moves.length + ') ---');
@@ -2991,6 +3021,7 @@ function migracaoNubankUltravioletaAplicar() {
 
 /** Devolve pra conta antiga (e fatura antiga) tudo que o backup guardou e ainda não foi desfeito. */
 function migracaoNubankUltravioletaDesfazer() {
+  migracaoAbrirPlanilha_();
   var sheet = getSpreadsheet_().getSheetByName(MIGRACAO_BACKUP_SHEET_);
   if (!sheet || sheet.getLastRow() < 2) throw new Error('Não há backup pra desfazer.');
   var rows = sheet.getRange(2, 1, sheet.getLastRow() - 1, 9).getValues();

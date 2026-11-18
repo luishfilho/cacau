@@ -704,6 +704,10 @@
   /* Sugestões fica sob as configurações (ou sob o tema, se não houver configurações). */
   #feedback-btn { top: 56px; }
   #settings-btn ~ #feedback-btn { top: 100px; }
+  /* Editar cards (só na aba Início) fica sob o de sugestões. */
+  #edit-cards-btn { top: 100px; }
+  #settings-btn ~ #edit-cards-btn { top: 144px; }
+  #edit-cards-btn[hidden] { display: none; }
   html[data-nav-side="left"] .theme-toggle-btn { right: auto; left: 8px; }
   /* Voltar ao topo fica acima da barra, no lado oposto ao dos botões (+ e para confirmar). */
   #scroll-to-top-btn { right: auto; left: 12px; }
@@ -932,6 +936,8 @@
     cursor: pointer;
   }
   .capsule.active { background: var(--primary); border-color: var(--primary); color: var(--primary-contrast); }
+  /* Reembolso concluído (aba Reembolsos): categoria/descrição da despesa riscadas (1ª linha do card, 2º span). */
+  .card.refund-done > .row:first-child > span:nth-child(2) { text-decoration: line-through; text-decoration-thickness: 1px; opacity: 0.75; }
   /* Chips de filtro ativo no cabeçalho colapsado do card de Filtrar lançamentos (ver
      renderTxFilterChips_) -- reaproveita .capsule.active tal qual (mesma formatação/
      cor/tamanho da cápsula SELECIONADA quando o card está expandido, pedido explícito
@@ -961,8 +967,6 @@
   .tx-filters-clear[hidden] { display: none; }
   .tx-filters-clear:hover { background: var(--border); color: var(--text); }
   /* Botão "Editar cards" no topo do Início e setas do editor. */
-  .home-edit-row { display: flex; justify-content: flex-end; margin-bottom: 8px; }
-  .home-edit-row button { width: auto; font-size: 12px; padding: 6px 12px; }
   .home-card-row { align-items: center; gap: 8px; }
   .home-card-move { display: flex; align-items: center; justify-content: center; width: 32px; height: 32px; padding: 0; border-radius: 50%; line-height: 0; }
   .home-card-move svg { display: block; width: 18px; height: 18px; fill: none; stroke: currentColor; stroke-width: 2.2; stroke-linecap: round; stroke-linejoin: round; pointer-events: none; }
@@ -1444,7 +1448,8 @@
   .budget-value-side { flex: 1 1 auto; min-width: 0; display: flex; flex-direction: column; gap: 8px; }
   .budget-value-side .kind-toggle { flex-direction: column; gap: 4px; margin: 0; }
   .budget-value-side .kind-toggle button { padding: 4px 0; font-size: 10px; white-space: nowrap; overflow: hidden; }
-  .budget-value-side .budget-switch { flex-direction: column-reverse; align-items: flex-start; justify-content: flex-end; gap: 3px; min-height: 0; margin: 0; font-size: 10px; line-height: 1.2; }
+  .budget-value-side .budget-switch { flex-direction: row; align-items: center; justify-content: center; gap: 8px; min-height: 0; margin: 0; font-size: 10px; line-height: 1.2; }
+  .budget-value-side .budget-switch span { flex: 1 1 auto; min-width: 0; text-align: center; overflow-wrap: anywhere; }
   .budget-start-step:disabled { opacity: 0.4; cursor: default; }
   .budget-switch { display: flex; align-items: center; justify-content: space-between; gap: 8px; min-height: 28px; margin: 8px 0 0; font-size: 11px; line-height: 1.25; cursor: pointer; }
   .budget-switch.is-hidden { visibility: hidden; pointer-events: none; }
@@ -1695,6 +1700,7 @@
   </div>
   
   <button class="theme-toggle-btn" id="feedback-btn" title="Sugestões e dúvidas" aria-label="Sugestões e dúvidas"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg></button>
+  <button class="theme-toggle-btn" id="edit-cards-btn" hidden title="Editar cards" aria-label="Editar cards"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg></button>
 
   <div class="tabbar-more" id="tabbar-more">
     <button class="tab-btn" data-view="accounts" aria-label="Contas"><svg class="tab-ico" viewBox="0 0 24 24" aria-hidden="true"><rect x="2" y="5" width="20" height="14" rx="2"/><path d="M2 10h20M6 15h4"/></svg><span class="tab-label"><span>Contas</span></span></button>
@@ -1719,7 +1725,7 @@
 
   <script>var FINANCAS_MULTIUSER = true;</script>
   <script src="https://accounts.google.com/gsi/client" async defer></script>
-  <script src="cacau-web.js?v=e18d772a57"></script>
+  <script src="cacau-web.js?v=c0b5ee723e"></script>
 <script>
   var STATE = {
     accounts: [],
@@ -2125,9 +2131,32 @@
   // fica plantado ali, parecendo "grudado" no conteúdo rolando por trás. Mais simples
   // esconder no primeiro scroll do que ficar reposicionando a cada pixel rolado.
   window.addEventListener('scroll', hideTooltip_, true);
-  function dismissOnOutsideClick(pop, cleanup) {
+  /** Depois que um menu/popover fecha por um toque/clique FORA dele, o clique que vem em seguida não faz o que
+   *  faria (abrir um card, marcar uma opção...): esse gesto serve só pra fechar o menu. Come o próximo "click"
+   *  (fase de captura, antes de qualquer handler do alvo); desarma sozinho se começar outro gesto (mousedown/
+   *  touchstart) ou depois de 3 s, pra nunca engolir um clique legítimo mais tarde. */
+  function swallowNextClick_() {
+    var timer = null;
+    function disarm() {
+      document.removeEventListener('click', eat, true);
+      document.removeEventListener('mousedown', disarm, true);
+      document.removeEventListener('touchstart', disarm, true);
+      if (timer) { clearTimeout(timer); timer = null; }
+    }
+    function eat(ev) { ev.stopPropagation(); ev.preventDefault(); disarm(); }
+    document.addEventListener('click', eat, true);
+    // Registrados durante o mousedown atual: só valem pro PRÓXIMO gesto (o atual já está sendo despachado).
+    document.addEventListener('mousedown', disarm, true);
+    document.addEventListener('touchstart', disarm, true);
+    timer = setTimeout(disarm, 3000);
+  }
+  /** swallowClick (opcional): o toque/clique que fecha o menu NÃO dispara o efeito dele (ver swallowNextClick_).
+   *  Fica desligado nos tooltips (fechar tooltip não deveria custar o toque). */
+  function dismissOnOutsideClick(pop, cleanup, swallowClick) {
     function outsideClick(e) {
-      if (!pop.contains(e.target)) cleanup(e);
+      if (pop.contains(e.target)) return;
+      cleanup(e);
+      if (swallowClick) swallowNextClick_();
     }
     setTimeout(function () { document.addEventListener('mousedown', outsideClick, true); }, 0);
     return function () { document.removeEventListener('mousedown', outsideClick, true); };
@@ -2352,7 +2381,7 @@
     var stopListening;
     function cleanup() { pop.remove(); stopListening(); }
     function dismiss() { cleanup(); if (onDismiss) onDismiss(); }
-    stopListening = dismissOnOutsideClick(pop, dismiss);
+    stopListening = dismissOnOutsideClick(pop, dismiss, true);
     pop.querySelector('[data-act="cancel"]').onclick = dismiss;
     pop.querySelector('[data-act="ok"]').onclick = function () { cleanup(); onConfirm(); };
   }
@@ -2369,7 +2398,7 @@
     positionPopover(anchorEl, pop);
     var stopListening;
     function cleanup() { pop.remove(); stopListening(); }
-    stopListening = dismissOnOutsideClick(pop, cleanup);
+    stopListening = dismissOnOutsideClick(pop, cleanup, true);
     pop.querySelector('[data-act="ok"]').onclick = cleanup;
   }
 
@@ -2410,7 +2439,7 @@
         onChange(index);
       };
     });
-    var stopListening = dismissOnOutsideClick(pop, function () { pop.remove(); stopListening(); });
+    var stopListening = dismissOnOutsideClick(pop, function () { pop.remove(); stopListening(); }, true);
   }
 
   /**
@@ -2494,6 +2523,8 @@
         var release = function () { dropdownClosedByAnchor_ = null; };
         document.addEventListener('click', release, { once: true });
         setTimeout(release, 1500);
+      } else if (e) {
+        swallowNextClick_(); // toque/clique fora só fecha o menu
       }
       cleanup();
     });
@@ -3371,7 +3402,7 @@
     positionPopover(anchorEl, pop);
     var stopListening;
     function cleanup() { pop.remove(); stopListening(); activeConfirmPopoverCleanup_ = null; }
-    stopListening = dismissOnOutsideClick(pop, cleanup);
+    stopListening = dismissOnOutsideClick(pop, cleanup, true);
     activeConfirmPopoverCleanup_ = cleanup;
     pop.querySelector('[data-icon-reset]').onclick = function () { cleanup(); onPick(null); };
     pop.querySelectorAll('.icon-picker-option').forEach(function (el) {
@@ -4168,6 +4199,8 @@
     lastRenderedView_ = STATE.currentView;
 
     syncTabbar_(STATE.currentView);
+    var editCardsBtn = document.getElementById('edit-cards-btn'); // botão-lápis fixo, só na aba Início
+    if (editCardsBtn) editCardsBtn.hidden = STATE.currentView !== 'dashboard';
     if (STATE.currentView === 'dashboard') renderDashboard();
     else if (STATE.currentView === 'transactions') renderTransactions();
     else if (STATE.currentView === 'accounts') renderAccounts();
@@ -4243,8 +4276,6 @@
     { id: 'recent', label: 'Últimos lançamentos' }
   ];
   var HOME_CARDS_KEY_ = 'financas-home-cards'; // por aparelho, como o tema e o lado da barra de abas
-  var HOME_EDIT_ICON_ = '<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" ' +
-    'stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="vertical-align:-2px"><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg>';
   var HOME_MOVE_ICONS_ = {
     up: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 15l6-6 6 6"/></svg>',
     down: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 9l6 6 6-6"/></svg>'
@@ -4389,10 +4420,8 @@
     };
 
     root.innerHTML =
-      '<div class="home-edit-row"><button type="button" class="secondary" id="home-edit-cards">' + HOME_EDIT_ICON_ + ' Editar cards</button></div>' +
       shown.map(function (id) { return cardHtml[id](); }).join('') +
-      (shown.length ? '' : '<div class="card"><div class="empty-state">Nenhum card ativo. Use "Editar cards" pra escolher o que aparece aqui.</div></div>');
-    document.getElementById('home-edit-cards').onclick = openHomeCardsModal_;
+      (shown.length ? '' : '<div class="card"><div class="empty-state">Nenhum card ativo. Use o botão de editar (lápis, ao lado) pra escolher o que aparece aqui.</div></div>');
     if (shown.indexOf('summary') !== -1) wireTxCalendarCard_('home');
 
     // wireTooltipTrigger_ também dá suporte a toque, que esse pino não tinha antes
@@ -4459,7 +4488,7 @@
       var labelW = btn.querySelector('.tab-label').scrollWidth;
       btn.style.width = (11 + 22 + 10 + labelW + 11) + 'px';
       btn.classList.add('expanded');
-      stopOutsideClick_ = dismissOnOutsideClick(btn, hold.close);
+      stopOutsideClick_ = dismissOnOutsideClick(btn, hold.close, true);
     });
     hold.onClose(function () {
       btn.style.width = '';
@@ -5201,13 +5230,23 @@
       return (b.tx.time || '').localeCompare(a.tx.time || '');
     });
 
+    // Reembolso concluído = TODAS as partes da despesa (de qualquer pessoa, mesmo com filtro de pessoa) completas.
+    groups.forEach(function (g) {
+      var all = sharesOfPassive_(g.tx.id);
+      g.done = all.length > 0 && all.every(isShareComplete_);
+    });
+    var hideDone = !!STATE.refundsHideDone;
+    var hiddenCount = hideDone ? groups.filter(function (g) { return g.done; }).length : 0;
+    if (hideDone) groups = groups.filter(function (g) { return !g.done; });
+
     var groupsHtml = groups.map(function (g) {
       var sharesHtml = g.shares.slice()
         .sort(function (a, b) { return personName_(a.personId).localeCompare(personName_(b.personId), 'pt-BR'); })
         .map(refundTabShareRowHtml_).join('');
-      return '<div class="card">' + extratoRowHtml(g.tx) + sharesHtml + '</div>';
-    }).join('') || '<div class="card"><div class="empty-state">Nenhuma despesa com reembolso' +
-      (filterId ? ' de ' + escapeHtml(filterLabel) : '') + ' ainda.</div></div>';
+      return '<div class="card' + (g.done ? ' refund-done' : '') + '">' + extratoRowHtml(g.tx) + sharesHtml + '</div>';
+    }).join('') || '<div class="card"><div class="empty-state">' +
+      (hiddenCount ? 'Nenhum reembolso em aberto' : 'Nenhuma despesa com reembolso') +
+      (filterId ? ' de ' + escapeHtml(filterLabel) : '') + (hiddenCount ? '.' : ' ainda.') + '</div></div>';
 
     root.innerHTML =
       '<div class="card">' +
@@ -5215,11 +5254,19 @@
           '<div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;min-width:0">' +
             '<h2 style="margin:0">Reembolsos</h2>' + refundsHeaderTextHtml_(computeRefundDebtors_(liveRefundShares_())) +
           '</div>' +
-          '<button type="button" class="capsule" id="refunds-person-btn" style="flex-shrink:0">' + escapeHtml(filterLabel) + ' ▾</button>' +
+          '<div style="display:flex;align-items:center;gap:6px;flex-shrink:0">' +
+            '<button type="button" class="capsule' + (hideDone ? ' active' : '') + '" id="refunds-done-btn" aria-pressed="' + (hideDone ? 'true' : 'false') + '">' +
+              (hideDone ? 'Mostrar concluídos' : 'Ocultar concluídos') + '</button>' +
+            '<button type="button" class="capsule" id="refunds-person-btn">' + escapeHtml(filterLabel) + ' ▾</button>' +
+          '</div>' +
         '</div>' +
       '</div>' +
       groupsHtml;
 
+    document.getElementById('refunds-done-btn').onclick = function () {
+      STATE.refundsHideDone = !STATE.refundsHideDone;
+      render();
+    };
     var personBtn = document.getElementById('refunds-person-btn');
     personBtn.onclick = function () {
       var options = [{ value: '', label: 'Todas', selected: !filterId }].concat(
@@ -8820,6 +8867,16 @@
     (spends || []).forEach(function (s) { if (!s.inst && s.d && (!oldest || s.d < oldest)) oldest = s.d; });
     return oldest;
   }
+  /** Início do histórico do app, sem olhar categoria: data do lançamento mais antigo (parcelados e previsões ficam
+   *  de fora, pelo mesmo motivo de budgetOldestSpendYmd_) ou null. */
+  function budgetAppOldestYmd_(transactions) {
+    var oldest = null;
+    (transactions || []).forEach(function (t) {
+      if (!t.date || t.forecastId || Number(t.installmentTotal || 1) > 1) return;
+      if (!oldest || t.date < oldest) oldest = t.date;
+    });
+    return oldest;
+  }
   /** Início padrão de um orçamento novo: começo do ciclo em andamento (mês: dia 1; semana: domingo; dia: hoje). */
   function budgetDefaultStart_(unit, todayStr) {
     return budgetCycleBase_({ unit: unit }, todayStr || todayYmd());
@@ -9406,7 +9463,7 @@
         menuEl.style.opacity = '1';
         menuEl.style.transform = 'translateY(0)';
       });
-      stopOutsideClick_ = dismissOnOutsideClick(menuEl, hold.close);
+      stopOutsideClick_ = dismissOnOutsideClick(menuEl, hold.close, true);
     });
     hold.onClose(function () {
       if (menuEl) { menuEl.remove(); menuEl = null; }
@@ -9926,7 +9983,7 @@
     setupMoneyInput(input, effectiveBalanceGoal_(STATE.balanceGoal, investmentsTotal, includeInvestments) || 0);
     var stopListening;
     function cleanup() { pop.remove(); stopListening(); activeConfirmPopoverCleanup_ = null; }
-    stopListening = dismissOnOutsideClick(pop, cleanup);
+    stopListening = dismissOnOutsideClick(pop, cleanup, true);
     activeConfirmPopoverCleanup_ = cleanup;
     function save_() {
       var amount = input.getValue();
@@ -11565,7 +11622,7 @@
       menuEl.style.top = clamped.top + 'px';
       menuEl.style.pointerEvents = 'auto';
       requestAnimationFrame(function () { menuEl.style.opacity = '1'; menuEl.style.transform = 'translateY(0)'; });
-      stopOutsideClick_ = dismissOnOutsideClick(menuEl, hold.close);
+      stopOutsideClick_ = dismissOnOutsideClick(menuEl, hold.close, true);
     });
     hold.onClose(function () {
       if (menuEl) { menuEl.remove(); menuEl = null; }
@@ -12229,6 +12286,9 @@
    * servidor enquanto o modo for 'auto'. Com plano de recuperação de estouro ativo (ver
    * budgetRecoveryState_), "Dispensar plano" também aparece aqui.
    */
+  var BUDGET_SCALE_TIP_ = 'Os meses não têm todos 30 dias. Ligado: o teto de um orçamento em meses acompanha os dias de cada mês. ' +
+    'Por exemplo, R$ 300 por mês vira R$ 310 num mês de 31 dias e R$ 280 num fevereiro de 28 dias. ' +
+    'Desligado: o teto é o mesmo valor fixo em todos os meses, não importa quantos dias tenham.';
   function openBudgetModal(existing, opts) {
     opts = opts || {};
     var suggestion = opts.suggestion || null;
@@ -12317,7 +12377,7 @@
                   '<button type="button" data-m="manual">Manual</button>' +
                 '</div>'
               : '') +
-            '<label class="budget-switch" id="b-scale-wrap" title="Aumentar/diminuir em meses com mais/menos de 30 dias"><span>Pelos dias do mês</span>' +
+            '<label class="budget-switch" id="b-scale-wrap" data-tooltip="' + escapeHtml(BUDGET_SCALE_TIP_) + '"><span>Ajustar em meses com ± de 30 dias</span>' +
               '<input type="checkbox" id="b-scale" role="switch" aria-label="Aumentar/diminuir em meses com mais/menos de 30 dias"></label>' +
           '</div>' +
         '</div>' +
@@ -12344,22 +12404,36 @@
         : '<button id="m-submit">Salvar</button>')
     );
 
+    // Sem foco automático: openModal foca o 1º campo (o do ciclo) num setTimeout; este vem depois e tira o foco
+    // (no celular isso abria o teclado/seleção sem a pessoa ter tocado em nada).
+    setTimeout(function () {
+      var a = document.activeElement;
+      if (a && a.closest && a.closest('.modal') && a.blur) a.blur();
+    }, 0);
+
     var spendsCache_ = null;
     function spends_() {
       if (!spendsCache_) spendsCache_ = budgetRelevantSpends_(selectedCategoryIds);
       return spendsCache_;
     }
+    /** "Início" do histórico do app: o lançamento mais antigo de TODAS as categorias (parcelados e previsões fora).
+     *  Não depende da categoria escolhida: o botão "Desde o início" funciona igual com ou sem categoria. */
+    var appOldestCache_ = undefined;
+    function appOldestYmd_() {
+      if (appOldestCache_ === undefined) appOldestCache_ = budgetAppOldestYmd_(STATE.allTransactions);
+      return appOldestCache_;
+    }
     // Editando: "Desde o início" já nasce marcado se o orçamento começa no ciclo do lançamento mais antigo.
     if (isEdit) {
-      var oldestSpend = budgetOldestSpendYmd_(spends_());
+      var oldestSpend = appOldestYmd_();
       fromBeginning = !!oldestSpend && budgetCycleBase_({ unit: cycleUnit }, anchorYmd) === budgetCycleBase_({ unit: cycleUnit }, oldestSpend);
     }
     function currentSpec_() { return { unit: cycleUnit, count: cycleCount }; }
-    /** Âncora do primeiro ciclo: com "Desde o início", o lançamento mais antigo das categorias (sem lançamento
+    /** Âncora do primeiro ciclo: com "Desde o início", o lançamento mais antigo do app (sem lançamento
      *  nenhum, o ciclo atual); editando, enquanto a pessoa não mexe no campo vale a âncora que o orçamento já tem. */
     function effectiveAnchor_() {
       if (fromBeginning && (!isEdit || startTouched)) {
-        var oldest = budgetOldestSpendYmd_(spends_());
+        var oldest = appOldestYmd_();
         return oldest && oldest <= today ? oldest : budgetDefaultStart_(cycleUnit, today);
       }
       return anchorYmd;
@@ -12661,6 +12735,8 @@
     document.getElementById('b-cycle-plus').onclick = function () { setCycle_(cycleUnit, cycleCount + 1); };
     document.getElementById('b-amount-minus').onclick = function () { stepAmount_(-BUDGET_AMOUNT_STEP_); };
     document.getElementById('b-amount-plus').onclick = function () { stepAmount_(BUDGET_AMOUNT_STEP_); };
+    // Tooltip explicativo: hover no mouse, toque longo no celular (toque curto continua ligando/desligando).
+    wireDayCell_(document.getElementById('b-scale-wrap'), function () {}, false);
     document.getElementById('b-scale').onchange = function () {
       scaleByDays = document.getElementById('b-scale').checked;
       syncGeral_();
@@ -13773,7 +13849,7 @@
         stack.style.opacity = '1';
         stack.style.transform = 'translateY(0)';
       });
-      stopOutsideClick_ = dismissOnOutsideClick(root, hold.close);
+      stopOutsideClick_ = dismissOnOutsideClick(root, hold.close, true);
     });
     hold.onClose(function () {
       stack.style.opacity = '0';
@@ -16395,6 +16471,7 @@
     var settingsBtn = document.getElementById('settings-btn');
     if (settingsBtn) settingsBtn.onclick = openSettingsModal_;
     document.getElementById('feedback-btn').onclick = openFeedbackModal_;
+    document.getElementById('edit-cards-btn').onclick = openHomeCardsModal_;
     document.getElementById('tree-open').onclick = openTreeModal_;
     var setupBannerBtn = document.getElementById('setup-banner-btn');
     if (setupBannerBtn) setupBannerBtn.onclick = openOnboardingModal_;
