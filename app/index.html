@@ -353,6 +353,9 @@
     color: var(--primary);
     border: 1px solid var(--primary);
   }
+  /* Par de botões do mesmo tamanho (Salvar / Salvar+): mesma largura e mesma borda. */
+  .btn-pair { display: flex; gap: 8px; }
+  .btn-pair button { flex: 1 1 0; min-width: 0; border: 1px solid var(--primary); }
   button.danger { background: var(--expense); }
   button:disabled { opacity: 0.5; cursor: default; }
 
@@ -1716,7 +1719,7 @@
 
   <script>var FINANCAS_MULTIUSER = true;</script>
   <script src="https://accounts.google.com/gsi/client" async defer></script>
-  <script src="cacau-web.js?v=d5db7ac295"></script>
+  <script src="cacau-web.js?v=e18d772a57"></script>
 <script>
   var STATE = {
     accounts: [],
@@ -5885,8 +5888,84 @@
     });
   }
 
-  /** Clique num lançamento do Extrato ou dos Últimos lançamentos: editar campos ou remover. */
-  function openTransactionDetailModal(t) {
+  // ---------- trocar o tipo (despesa / receita / transferência) ao editar ----------
+  // O servidor não muda o tipo de um lançamento que já existe (despesa e receita têm categorias
+  // diferentes e a transferência são duas pernas), então a troca reabre o formulário já no tipo novo
+  // com o que dá pra aproveitar, e o Salvar CRIA o lançamento novo e só então REMOVE o original.
+  var TX_KIND_OPTIONS_ = [['expense', 'Despesa'], ['income', 'Receita'], ['transfer', 'Transferência']];
+  function txKindToggleHtml_(kind) {
+    var cur = (kind === 'transfer_out' || kind === 'transfer_in') ? 'transfer' : kind;
+    return '<div class="field"><label>Tipo</label><div class="kind-toggle" id="e-kind-toggle">' +
+      TX_KIND_OPTIONS_.map(function (o) {
+        return '<button type="button" data-k="' + o[0] + '"' + (o[0] === cur ? ' class="active"' : '') + '>' + o[1] + '</button>';
+      }).join('') + '</div></div>';
+  }
+  function wireTxKindToggle_(blockedMsg, onPick) {
+    document.querySelectorAll('#e-kind-toggle button').forEach(function (b) {
+      b.onclick = function () {
+        if (b.classList.contains('active')) return;
+        if (blockedMsg) { errorPopover(b, blockedMsg); return; }
+        onPick(b.dataset.k);
+      };
+    });
+  }
+  /** Rascunho já no tipo novo, aproveitando do formulário atual: data, hora, valor, descrição e conta
+   *  (v.src = tipo de origem: 'expense' | 'income' | 'transfer'). Categoria e vínculo de recorrência
+   *  não passam (são específicos do tipo). Conta que não serve ao tipo novo (cartão em receita,
+   *  investimento em despesa/receita) fica em branco. */
+  function typeChangeDraft_(newKind, v) {
+    var draft = {
+      id: '', date: v.date, time: v.time, amount: v.amount, description: v.description,
+      categoryId: null, installmentGroupId: null
+    };
+    function accountOk(id) {
+      var a = STATE.accounts.find(function (x) { return x.id === id; });
+      if (!a) return null;
+      if (a.type === 'investment') return null;
+      if (newKind === 'income' && a.type === 'credit_card') return null;
+      return id;
+    }
+    if (newKind === 'transfer') {
+      draft.kind = 'transfer_out';
+      draft.draftTransfer = true;
+      draft.fromAccountId = v.src === 'expense' ? (v.accountId || null) : null;
+      draft.toAccountId = v.src === 'income' ? (v.accountId || null) : null;
+      return draft;
+    }
+    draft.kind = newKind;
+    var accId = v.src === 'transfer' ? (newKind === 'expense' ? v.fromAccountId : v.toAccountId) : v.accountId;
+    draft.accountId = accountOk(accId);
+    draft.counterparty = v.counterparty || '';
+    draft.excludeFromAnalysis = !!v.excludeFromAnalysis;
+    return draft;
+  }
+  /** Cria o(s) lançamento(s) novo(s) e, só se a criação der certo, remove o original — mesma
+   *  prévia otimista do "Salvar cópia" + "Remover". entries = prévias; create(optimisticIds) = pedido ao servidor. */
+  function finishTypeChange_(original, entries, create) {
+    STATE.deletingIds.push(original.id);
+    var optimisticIds = entries.map(applyOptimisticEntry);
+    render();
+    var created = false;
+    var promise = create(optimisticIds).then(function () {
+      created = true;
+      return resolveRealId_(original.id).then(function (realId) { return run('deleteTransaction', realId); });
+    });
+    afterMutation_(promise).catch(function (err) {
+      STATE.pendingTransactions = STATE.pendingTransactions.filter(function (x) { return optimisticIds.indexOf(x.id) === -1; });
+      STATE.deletingIds = STATE.deletingIds.filter(function (x) { return x !== original.id; });
+      showToast(created ? 'O lançamento novo foi criado, mas não consegui remover o original: ' + err.message : err.message, true);
+      refreshAll().then(render);
+    });
+  }
+  function hasRefundTies_(txId) {
+    return sharesOfPassive_(txId).length > 0 || linksOfActive_(txId).length > 0;
+  }
+
+  /** Clique num lançamento do Extrato ou dos Últimos lançamentos: editar campos ou remover.
+   *  convertCtx ({ original }) = o formulário está no meio de uma troca de tipo: t é o rascunho. */
+  function openTransactionDetailModal(t, convertCtx) {
+    var converting = !!convertCtx;
+    var original = converting ? convertCtx.original : t;
     var isTransfer = t.kind === 'transfer_out' || t.kind === 'transfer_in';
 
     if (isTransfer) {
@@ -5895,8 +5974,8 @@
       // (deleteTransaction sempre remove as 2 juntas — ver deleteTransfer), mas se
       // faltar por qualquer inconsistência, degrada com segurança pra só remover em vez
       // de arriscar editar com metade do estado.
-      var sibling = STATE.allTransactions.find(function (x) { return x.transferGroupId === t.transferGroupId && x.id !== t.id; });
-      if (!sibling) {
+      var sibling = converting ? null : STATE.allTransactions.find(function (x) { return x.transferGroupId === t.transferGroupId && x.id !== t.id; });
+      if (!converting && !sibling) {
         openModal(
           '<h2>Transferência</h2>' +
           '<div class="muted" style="margin-bottom:16px">' + escapeHtml(t.description || 'Transferência') + '<br>' +
@@ -5914,8 +5993,9 @@
         return;
       }
 
-      var outLeg = t.kind === 'transfer_out' ? t : sibling;
-      var inLeg = t.kind === 'transfer_in' ? t : sibling;
+      // Em troca de tipo não há pernas reais ainda: só as contas do rascunho.
+      var outLeg = converting ? { id: '', accountId: t.fromAccountId || null } : (t.kind === 'transfer_out' ? t : sibling);
+      var inLeg = converting ? { id: '', accountId: t.toAccountId || null, billMonth: '' } : (t.kind === 'transfer_in' ? t : sibling);
       var accountItems = rankedAccountItems();
       var fromField, toField;
 
@@ -5943,6 +6023,7 @@
 
       openModal(
         '<h2>Editar transferência</h2>' +
+        txKindToggleHtml_(t.kind) +
         '<div class="field" style="display:flex;gap:8px">' +
           '<div style="flex:1"><label>Data</label><input type="date" id="e-date" value="' + t.date + '"></div>' +
           '<div style="flex:1"><label>Horário</label><input type="time" id="e-time" value="' + (t.time || '') + '"></div>' +
@@ -5953,9 +6034,11 @@
         '<div class="field"><label>Descrição</label><input id="e-desc" value="' + escapeHtml(t.description || '') + '"></div>' +
         '<div id="e-transfer-bill-field"></div>' +
         '<div style="display:flex;gap:8px;align-items:center">' +
-          '<button class="danger" id="e-remove" style="flex:1">Remover</button>' +
+          (converting
+            ? '<button type="button" class="secondary" id="e-remove" style="flex:1">Voltar</button>'
+            : '<button class="danger" id="e-remove" style="flex:1">Remover</button>') +
           '<button id="m-submit" style="flex:1">Salvar</button>' +
-          '<button type="button" class="secondary" id="e-save-copy" style="flex:0 0 auto;padding:4px 10px;font-size:12px">Salvar cópia</button>' +
+          (converting ? '' : '<button type="button" class="secondary" id="e-save-copy" style="flex:0 0 auto;padding:4px 10px;font-size:12px">Salvar cópia</button>') +
         '</div>'
       );
       setupMoneyInput(document.getElementById('e-amount'), t.amount);
@@ -5967,12 +6050,22 @@
       });
       updateTransferBillFieldE_();
 
-      document.getElementById('e-remove').onclick = function () {
-        confirmPopover(document.getElementById('e-remove'), 'Remover esta transferência?', function () {
-          closeModal();
-          removeTransactionOptimistically_(t.id);
-        });
-      };
+      wireTxKindToggle_('', function (newKind) {
+        openTransactionDetailModal(typeChangeDraft_(newKind, {
+          src: 'transfer', date: document.getElementById('e-date').value, time: document.getElementById('e-time').value,
+          amount: document.getElementById('e-amount').getValue(), description: capitalizeFirst_(document.getElementById('e-desc').value),
+          fromAccountId: fromField.getValue(), toAccountId: toField.getValue()
+        }), { original: original });
+      });
+
+      document.getElementById('e-remove').onclick = converting
+        ? function () { openTransactionDetailModal(original); }
+        : function () {
+          confirmPopover(document.getElementById('e-remove'), 'Remover esta transferência?', function () {
+            closeModal();
+            removeTransactionOptimistically_(t.id);
+          });
+        };
 
       document.getElementById('m-submit').onclick = function () {
         var submitBtn = document.getElementById('m-submit');
@@ -5986,6 +6079,31 @@
         var date = document.getElementById('e-date').value;
         var time = document.getElementById('e-time').value;
         var description = capitalizeFirst_(document.getElementById('e-desc').value);
+        if (converting) {
+          // Troca de tipo (despesa/receita -> transferência): cria as duas pernas e remove o original.
+          var billMonthC = billSelect ? billSelect.value : '';
+          var goTransfer = function () {
+            closeModal();
+            finishTypeChange_(original, [
+              { accountId: fromId, categoryId: null, kind: 'transfer_out', amount: amount, date: date, time: time, description: description },
+              { accountId: toId, categoryId: null, kind: 'transfer_in', amount: amount, date: date, time: time, description: description }
+            ], function (optimisticIds) {
+              return resolveRealIds_({ fromAccountId: fromId, toAccountId: toId }, ['fromAccountId', 'toAccountId']).then(function (resolved) {
+                return run('createTransfer', {
+                  date: date, time: time, fromAccountId: resolved.fromAccountId, toAccountId: resolved.toAccountId,
+                  amount: amount, description: description, billMonth: billMonthC
+                }).then(function (legs) {
+                  resolveCreatedTransactions_(optimisticIds, [legs.out, legs.in]);
+                  return legs;
+                });
+              });
+            });
+          };
+          if (hasRefundTies_(original.id)) {
+            confirmPopover(submitBtn, 'Os vínculos de reembolso do lançamento original serão removidos. Continuar?', goTransfer);
+          } else goTransfer();
+          return;
+        }
         var payload = {
           transferGroupId: t.transferGroupId, date: date, time: time,
           fromAccountId: fromId, toAccountId: toId, amount: amount, description: description,
@@ -6012,7 +6130,7 @@
 
       // "Salvar cópia": mesma ideia da versão não-transferência (ver mais abaixo) —
       // cria uma transferência NOVA com o que estiver no formulário, sem fechar o modal.
-      document.getElementById('e-save-copy').onclick = function () {
+      if (document.getElementById('e-save-copy')) document.getElementById('e-save-copy').onclick = function () {
         var copyBtn = document.getElementById('e-save-copy');
         var amount = document.getElementById('e-amount').getValue();
         if (!amount || amount <= 0) { errorPopover(copyBtn, 'O valor precisa ser maior que zero.'); return; }
@@ -6059,8 +6177,8 @@
     var isInstallment = !!t.installmentGroupId;
     // Ver renderForecastToggleButton_/renderRememberCategoryButton_ (compartilhadas com
     // Novo lançamento e Revisar pendência) -- aqui já nasce com o vínculo/estado atuais
-    // do próprio lançamento em vez de vazio.
-    var selectedForecastId = forecastSelectionForTx_(t);
+    // do próprio lançamento em vez de vazio. Em troca de tipo o rascunho nasce sem vínculo.
+    var selectedForecastId = converting ? '' : forecastSelectionForTx_(t);
     var rememberCategoryForCounterparty = false;
     // Nasce com o estado ATUAL do próprio lançamento (diferente de Novo lançamento/
     // Revisar pendência, que sempre começam desligados) -- editar é o único jeito de
@@ -6071,6 +6189,7 @@
 
     openModal(
       '<h2>Editar lançamento</h2>' +
+      txKindToggleHtml_(t.kind) +
       '<div class="field" style="display:flex;gap:8px">' +
         '<div style="flex:1"><label>Data</label><input type="date" id="e-date" value="' + t.date + '"></div>' +
         '<div style="flex:1"><label>Horário</label><input type="time" id="e-time" value="' + (t.time || '') + '"></div>' +
@@ -6090,8 +6209,8 @@
             // .field-action-group: os 2 links lado a lado, ~um espaço entre eles, colados na
             // direita (ver Stylesheet.html) -- e o flex de fora vê UM item só (o grupo), não 2.
             '<span class="field-action-group">' +
-              (t.kind === 'expense' && !isInstallment ? '<span id="e-refund-field"></span>' : '') +
-              (t.kind === 'income' ? '<span id="e-refundlink-field"></span>' : '') +
+              (t.kind === 'expense' && !isInstallment && !converting ? '<span id="e-refund-field"></span>' : '') +
+              (t.kind === 'income' && !converting ? '<span id="e-refundlink-field"></span>' : '') +
               '<span id="e-outlier-field"></span>' +
             '</span>' +
           '</div>' +
@@ -6124,9 +6243,11 @@
         '</div>' +
       '</div>' +
       '<div style="display:flex;gap:8px;align-items:center">' +
-        '<button class="danger" id="e-remove" style="flex:1">Remover' + (isInstallment ? ' todas as parcelas' : '') + '</button>' +
+        (converting
+          ? '<button type="button" class="secondary" id="e-remove" style="flex:1">Voltar</button>'
+          : '<button class="danger" id="e-remove" style="flex:1">Remover' + (isInstallment ? ' todas as parcelas' : '') + '</button>') +
         '<button id="m-submit" style="flex:1">Salvar</button>' +
-        '<button type="button" class="secondary" id="e-save-copy" style="flex:0 0 auto;padding:4px 10px;font-size:12px">Salvar cópia</button>' +
+        (converting ? '' : '<button type="button" class="secondary" id="e-save-copy" style="flex:0 0 auto;padding:4px 10px;font-size:12px">Salvar cópia</button>') +
       '</div>' +
       (isInstallment
         ? '<div style="text-align:center;margin-top:8px"><button type="button" class="secondary" id="e-remove-one" style="font-size:12px;padding:4px 8px">Remover só esta parcela (' + t.installmentSeq + '/' + t.installmentTotal + ')</button></div>'
@@ -6269,7 +6390,17 @@
     renderRememberCategoryButtonE_();
     renderOutlierFieldE_();
 
-    document.getElementById('e-remove').onclick = function () {
+    wireTxKindToggle_(isInstallment ? 'Lançamento parcelado não pode mudar de tipo.' : '', function (newKind) {
+      openTransactionDetailModal(typeChangeDraft_(newKind, {
+        src: t.kind, date: document.getElementById('e-date').value, time: document.getElementById('e-time').value,
+        amount: document.getElementById('e-amount').getValue(),
+        description: capitalizeFirst_(document.getElementById('e-desc').value),
+        counterparty: capitalizeFirst_(document.getElementById('e-counterparty').value),
+        accountId: accountField.getValue(), excludeFromAnalysis: outlierFlagged
+      }), { original: original });
+    });
+
+    document.getElementById('e-remove').onclick = converting ? function () { openTransactionDetailModal(original); } : function () {
       var confirmMsg = isInstallment
         ? 'Remover as ' + t.installmentTotal + ' parcelas dessa compra?'
         : 'Remover este lançamento?';
@@ -6299,6 +6430,42 @@
       if (!accountId) { errorPopover(submitBtn, 'Selecione uma conta.'); return; }
       var categoryId = categoryField.getValue();
       var description = capitalizeFirst_(document.getElementById('e-desc').value);
+      if (converting) {
+        // Troca de tipo: cria o lançamento novo (já no tipo escolhido) e remove o original.
+        var cDate = document.getElementById('e-date').value;
+        var cTime = document.getElementById('e-time').value;
+        var cCounterparty = capitalizeFirst_(document.getElementById('e-counterparty').value);
+        var cForecast = resolveForecastSelection_('e-forecast');
+        var goConvert = function () {
+          closeModal();
+          var cPromise;
+          finishTypeChange_(original, [{
+            accountId: accountId, categoryId: categoryId, kind: t.kind, amount: amount, date: cDate, time: cTime,
+            description: description, counterparty: cCounterparty, excludeFromAnalysis: outlierFlagged
+          }], function (optimisticIds) {
+            cPromise = cForecast.then(function (forecastId) {
+              var fc = forecastFieldsFromSelection_(forecastId, cDate);
+              return resolveRealIds_({ accountId: accountId, categoryId: categoryId }, ['accountId', 'categoryId']).then(function (resolved) {
+                return run('createTransaction', {
+                  kind: t.kind, date: cDate, time: cTime, accountId: resolved.accountId, categoryId: resolved.categoryId,
+                  amount: amount, description: description, counterparty: cCounterparty,
+                  rememberCategoryForCounterparty: rememberCategoryForCounterparty, installments: 1,
+                  forecastId: fc.forecastId, forecastCycleMonth: fc.forecastCycleMonth, excludeFromAnalysis: outlierFlagged
+                }).then(function (createdRows) {
+                  resolveCreatedTransactions_(optimisticIds, createdRows);
+                  return createdRows;
+                });
+              });
+            });
+            registerTxCreation_(optimisticIds[0], cPromise);
+            return cPromise;
+          });
+        };
+        if (hasRefundTies_(original.id)) {
+          confirmPopover(submitBtn, 'Os vínculos de reembolso do lançamento original serão removidos. Continuar?', goConvert);
+        } else goConvert();
+        return;
+      }
       var payload = {
         id: t.id,
         date: document.getElementById('e-date').value,
@@ -6349,7 +6516,7 @@
     // "Salvar cópia": cria um lançamento NOVO com o que estiver no formulário agora,
     // sem tocar no original nem fechar o modal — pensado pra registrar rapidamente
     // vários lançamentos parecidos (edita um detalhe, salva cópia, edita de novo...).
-    document.getElementById('e-save-copy').onclick = function () {
+    if (document.getElementById('e-save-copy')) document.getElementById('e-save-copy').onclick = function () {
       var copyBtn = document.getElementById('e-save-copy');
       var amount = document.getElementById('e-amount').getValue();
       if (!amount || amount <= 0) { errorPopover(copyBtn, 'O valor precisa ser maior que zero.'); return; }
@@ -7585,6 +7752,20 @@
       if (isEdit && type !== 'credit_card' && balanceValue < 0) {
         errorPopover(document.getElementById('m-submit'), 'Saldo não pode ser negativo nesse tipo de conta.');
         return;
+      }
+      // Cartão precisa de fechamento e vencimento (o servidor recusa sem eles, mas só DEPOIS
+      // do menu já ter fechado, descartando o que foi preenchido): barra aqui, com o menu aberto.
+      if (type === 'credit_card') {
+        var closingNum = Number(document.getElementById('m-closing').value);
+        var dueNum = Number(document.getElementById('m-due').value);
+        if (!(closingNum >= 1 && closingNum <= 31 && Math.floor(closingNum) === closingNum)) {
+          errorPopover(document.getElementById('m-submit'), 'Informe o dia de fechamento da fatura (de 1 a 31).');
+          return;
+        }
+        if (!(dueNum >= 1 && dueNum <= 31 && Math.floor(dueNum) === dueNum)) {
+          errorPopover(document.getElementById('m-submit'), 'Informe o dia de vencimento da fatura (de 1 a 31).');
+          return;
+        }
       }
       var payload = {
         name: name,
@@ -13655,8 +13836,12 @@
       '</div>' +
       '<div id="tx-form-fields"></div>' +
       // Salvar+ salva e mantém o menu aberto, já pronto pro próximo (só data e conta ficam).
-      '<button id="m-submit">Salvar</button> ' +
-      '<button id="m-submit-more" class="secondary" title="Salvar e manter o menu aberto, mantendo data e conta">Salvar+</button>'
+      // .btn-pair: os dois com a mesma largura (flex:1) e a mesma borda de 1 px (o secundário já
+      // tinha; sem ela o Salvar+ ficava 2 px maior em altura e largura).
+      '<div class="btn-pair">' +
+        '<button id="m-submit">Salvar</button>' +
+        '<button id="m-submit-more" class="secondary" title="Salvar e manter o menu aberto, mantendo data e conta">Salvar+</button>' +
+      '</div>'
     );
     // Conta(s) escolhida(s) -- sobrevivem a trocar Despesa/Receita/Transferência quando ainda
     // existem na lista do novo tipo (antes o seletor era desmarcado na troca) e ao Salvar+.
@@ -16052,13 +16237,16 @@
   }
 
   // ---------- seletor nativo de data/hora ----------
-  // Clicar em qualquer parte do campo já foca o texto (padrão do navegador, pra
-  // quem prefere digitar); aqui também abrimos o seletor nativo junto, já que o
-  // mais comum é escolher visualmente em vez de digitar.
+  // No toque (celular), tocar em qualquer parte do campo abre o seletor nativo direto: é o
+  // jeito natural de escolher data/hora ali. No mouse (PC) NÃO abre sozinho: o popup do
+  // seletor toma o teclado enquanto está aberto e impedia digitar a data/hora. Com o mouse o
+  // clique só foca o campo (dá pra digitar de cara) e o seletor abre pelo ícone do próprio
+  // campo (calendário/relógio), que é o comportamento nativo.
   function setupDateTimePickerAutoOpen_() {
     document.addEventListener('click', function (e) {
       var el = e.target;
       if (!el.matches || !el.matches('input[type="date"], input[type="time"]')) return;
+      if (e.pointerType !== 'touch' && e.pointerType !== 'pen') return;
       if (typeof el.showPicker !== 'function') return;
       try { el.showPicker(); } catch (err) { /* sem user-activation, campo desabilitado, etc. */ }
     });

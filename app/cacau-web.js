@@ -2856,6 +2856,156 @@ function removeJunkPendingEntries() {
   SpreadsheetApp.getUi().alert(removedCount + ' pendência(s) removida(s) (frase ignorada, sem valor real, ou par de corrida cancelada/reembolso).');
 }
 
+// ===== Migrations.js =====
+/**
+ * Migração pontual (17/11/2026): lançamentos que foram feitos na conta Nubank mas eram do
+ * cartão "Nu Ultravioleta" (a conta do cartão só foi criada depois). Fica de fora a lista
+ * MIGRACAO_FICAM_ (os poucos que são mesmo da conta Nubank); todo o resto da conta Nubank
+ * vai pro cartão. Rodar pelo editor do Apps Script (selecionar a função e clicar em Executar):
+ *
+ *   1. migracaoNubankUltravioletaSimular()  -> só mostra o plano no log, não grava nada.
+ *   2. migracaoNubankUltravioletaAplicar()  -> guarda um backup na aba "Backup migração Nubank"
+ *      e move. Aborta SEM gravar nada se algum "fica" não casar com exatamente um lançamento.
+ *   3. migracaoNubankUltravioletaDesfazer() -> devolve tudo pra Nubank a partir do backup.
+ *
+ * Usa updateTransaction (a mesma regra do app): ao mudar a conta de um lançamento pro cartão,
+ * a fatura (BillMonth) é recalculada pelo dia de fechamento do cartão.
+ * Nunca move: transferências (têm duas pernas, usam updateTransfer), parcelados (a fatura de
+ * cada parcela é calculada na criação) e os lançamentos de saldo inicial/consolidação da conta.
+ */
+var MIGRACAO_ORIGEM_ = 'Nubank';
+var MIGRACAO_DESTINO_ = 'Nu Ultravioleta';
+var MIGRACAO_BACKUP_SHEET_ = 'Backup migração Nubank';
+// Os que CONTINUAM na conta Nubank. cents = valor em centavos (positivo, sem sinal);
+// kinds (opcional) distingue dois lançamentos de mesmo valor e data (salário x transferência).
+var MIGRACAO_FICAM_ = [
+  { label: '31/08 salário', date: '2026-08-31', cents: 887721, kinds: ['income'] },
+  { label: '31/08 transf pra 99', date: '2026-08-31', cents: 887721, kinds: ['expense', 'transfer_out'] },
+  { label: '06/10 R$ 58,00', date: '2026-10-06', cents: 5800 },
+  { label: '13/10 R$ 21,00', date: '2026-10-13', cents: 2100 },
+  { label: '19/10 R$ 1.000,00', date: '2026-10-19', cents: 100000 }
+];
+
+function migracaoYmd_(v) {
+  if (v instanceof Date) return Utilities.formatDate(v, Session.getScriptTimeZone(), 'yyyy-MM-dd');
+  return String(v || '').slice(0, 10);
+}
+
+function migracaoFindAccount_(accounts, name) {
+  var found = accounts.filter(function (a) { return !isArchived_(a.Archived) && namesMatch_(a.Name, name); });
+  if (found.length !== 1) throw new Error('Esperava exatamente 1 conta ativa chamada "' + name + '" e achei ' + found.length + '.');
+  return found[0];
+}
+
+/** Monta o plano sem gravar nada: { origem, destino, keeps, moves, skipped, errors }. */
+function migracaoPlano_() {
+  var accounts = readAll_('Accounts');
+  var origem = migracaoFindAccount_(accounts, MIGRACAO_ORIGEM_);
+  var destino = migracaoFindAccount_(accounts, MIGRACAO_DESTINO_);
+  var errors = [];
+  if (destino.Type !== 'credit_card') errors.push('"' + MIGRACAO_DESTINO_ + '" não é do tipo cartão de crédito.');
+  if (!Number(destino.ClosingDay) || !Number(destino.DueDay)) {
+    errors.push('"' + MIGRACAO_DESTINO_ + '" está sem dia de fechamento/vencimento: preencha em Editar conta antes (a fatura de cada lançamento depende disso).');
+  }
+  var txs = readAll_('Transactions').filter(function (t) { return t.AccountID === origem.ID; });
+  var kept = {};
+  var keeps = [];
+  MIGRACAO_FICAM_.forEach(function (spec) {
+    var matches = txs.filter(function (t) {
+      if (migracaoYmd_(t.Date) !== spec.date) return false;
+      if (Math.round(Math.abs(Number(t.Amount)) * 100) !== spec.cents) return false;
+      return !spec.kinds || spec.kinds.indexOf(t.Kind) !== -1;
+    });
+    if (matches.length !== 1) {
+      errors.push('"' + spec.label + '": esperava 1 lançamento na conta Nubank e achei ' + matches.length + '.');
+    }
+    matches.forEach(function (t) { kept[t.ID] = true; keeps.push({ spec: spec.label, tx: t }); });
+  });
+  var moves = [], skipped = [];
+  txs.forEach(function (t) {
+    if (kept[t.ID]) return;
+    var why = null;
+    if (t.Kind === 'transfer_in' || t.Kind === 'transfer_out') why = 'transferência (mover manualmente)';
+    else if (t.InstallmentGroupID) why = 'parcelado (mover manualmente)';
+    else if (t.Description === ACCOUNT_OPENING_DESCRIPTION || t.Description === ACCOUNT_CONSOLIDATION_DESCRIPTION) why = 'saldo inicial/consolidação da conta';
+    if (why) skipped.push({ tx: t, why: why }); else moves.push(t);
+  });
+  return { origem: origem, destino: destino, keeps: keeps, moves: moves, skipped: skipped, errors: errors };
+}
+
+function migracaoLinha_(t) {
+  return migracaoYmd_(t.Date) + ' | ' + t.Kind + ' | ' + Number(t.Amount).toFixed(2) + ' | ' + (t.Description || '') + (t.Counterparty ? ' (' + t.Counterparty + ')' : '') + ' | ' + t.ID;
+}
+
+function migracaoLogPlano_(p) {
+  Logger.log('Origem: ' + p.origem.Name + ' | Destino: ' + p.destino.Name);
+  Logger.log('--- FICAM na ' + p.origem.Name + ' (' + p.keeps.length + ') ---');
+  p.keeps.forEach(function (k) { Logger.log('[' + k.spec + '] ' + migracaoLinha_(k.tx)); });
+  Logger.log('--- NÃO movidos, conferir à mão (' + p.skipped.length + ') ---');
+  p.skipped.forEach(function (s) { Logger.log('(' + s.why + ') ' + migracaoLinha_(s.tx)); });
+  Logger.log('--- VÃO pro ' + p.destino.Name + ' (' + p.moves.length + ') ---');
+  p.moves.slice().sort(function (a, b) { return migracaoYmd_(a.Date) < migracaoYmd_(b.Date) ? -1 : 1; })
+    .forEach(function (t) { Logger.log(migracaoLinha_(t)); });
+  if (p.errors.length) {
+    Logger.log('--- PROBLEMAS (nada será gravado) ---');
+    p.errors.forEach(function (e) { Logger.log(e); });
+  }
+}
+
+function migracaoNubankUltravioletaSimular() {
+  var p = migracaoPlano_();
+  migracaoLogPlano_(p);
+  var resumo = 'Simulação: ' + p.moves.length + ' vão pro ' + p.destino.Name + ', ' + p.keeps.length + ' ficam, ' +
+    p.skipped.length + ' não movidos' + (p.errors.length ? ', ' + p.errors.length + ' PROBLEMA(S)' : '') + '. Nada foi gravado.';
+  Logger.log(resumo);
+  return resumo;
+}
+
+function migracaoNubankUltravioletaAplicar() {
+  var p = migracaoPlano_();
+  migracaoLogPlano_(p);
+  if (p.errors.length) throw new Error('Abortado, nada foi gravado: ' + p.errors.join(' '));
+  if (!p.moves.length) throw new Error('Nada pra mover.');
+  // Backup ANTES de mexer: uma linha por lançamento com a conta e a fatura de antes.
+  var ss = getSpreadsheet_();
+  var backup = ss.getSheetByName(MIGRACAO_BACKUP_SHEET_) || ss.insertSheet(MIGRACAO_BACKUP_SHEET_);
+  if (backup.getLastRow() === 0) backup.appendRow(['Quando', 'ID', 'Data', 'Valor', 'Tipo', 'Descrição', 'ContaAntiga', 'BillMonthAntigo', 'Desfeito']);
+  var agora = new Date();
+  backup.getRange(backup.getLastRow() + 1, 1, p.moves.length, 9).setValues(p.moves.map(function (t) {
+    return [agora, t.ID, migracaoYmd_(t.Date), Number(t.Amount), t.Kind, t.Description || '', t.AccountID, t.BillMonth || '', ''];
+  }));
+  var ok = 0, falhas = [];
+  p.moves.forEach(function (t) {
+    try {
+      updateTransaction({ id: t.ID, accountId: p.destino.ID, date: migracaoYmd_(t.Date) });
+      ok++;
+    } catch (e) {
+      falhas.push(migracaoLinha_(t) + ' -> ' + e.message);
+    }
+  });
+  falhas.forEach(function (f) { Logger.log('FALHOU: ' + f); });
+  var resumo = 'Movidos ' + ok + ' de ' + p.moves.length + ' para ' + p.destino.Name + '; ' + falhas.length + ' falha(s). Backup na aba "' + MIGRACAO_BACKUP_SHEET_ + '".';
+  Logger.log(resumo);
+  return resumo;
+}
+
+/** Devolve pra conta antiga (e fatura antiga) tudo que o backup guardou e ainda não foi desfeito. */
+function migracaoNubankUltravioletaDesfazer() {
+  var sheet = getSpreadsheet_().getSheetByName(MIGRACAO_BACKUP_SHEET_);
+  if (!sheet || sheet.getLastRow() < 2) throw new Error('Não há backup pra desfazer.');
+  var rows = sheet.getRange(2, 1, sheet.getLastRow() - 1, 9).getValues();
+  var feitos = 0;
+  rows.forEach(function (r, i) {
+    if (r[8]) return;
+    updateRowById_('Transactions', r[1], { AccountID: r[6], BillMonth: r[7] });
+    sheet.getRange(i + 2, 9).setValue('desfeito em ' + new Date().toISOString());
+    feitos++;
+  });
+  var resumo = 'Desfeitos ' + feitos + ' lançamento(s).';
+  Logger.log(resumo);
+  return resumo;
+}
+
 // ===== Mode.js =====
 /**
  * Modo de execução do backend.
