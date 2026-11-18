@@ -13620,8 +13620,16 @@
         '<button data-k="transfer">Transferência</button>' +
       '</div>' +
       '<div id="tx-form-fields"></div>' +
-      '<button id="m-submit">Salvar</button>'
+      // Salvar+ salva e mantém o menu aberto, já pronto pro próximo (só data e conta ficam).
+      '<button id="m-submit">Salvar</button> ' +
+      '<button id="m-submit-more" class="secondary" title="Salvar e manter o menu aberto, mantendo data e conta">Salvar+</button>'
     );
+    // Conta(s) escolhida(s) -- sobrevivem a trocar Despesa/Receita/Transferência quando ainda
+    // existem na lista do novo tipo (antes o seletor era desmarcado na troca) e ao Salvar+.
+    var preservedAccountId = null, preservedToAccountId = null;
+    // true só na 1ª renderização depois de um Salvar+: limpa valor/horário/descrição/"pago a"
+    // (que normalmente sobrevivem à troca de tipo) mantendo data e conta.
+    var clearForNext_ = false;
     function setKind(k) {
       if (k !== 'expense') stagedRefundShares = [];
       if (k !== 'income') stagedRefundLinks = [];
@@ -13693,6 +13701,22 @@
       // preservedCounterparty, no início de openTransactionModal.
       var prevCounterpartyEl = document.getElementById('t-counterparty');
       if (prevCounterpartyEl) preservedCounterparty = prevCounterpartyEl.value;
+      // Conta: guarda a escolha do tipo anterior (Despesa/Receita têm "Conta"; Transferência
+      // tem "De"/"Para") pra reaplicar abaixo se ainda for uma opção do tipo novo.
+      if (!isFirstRender_) {
+        if (document.getElementById('t-account-field') && accountField) preservedAccountId = accountField.getValue() || null;
+        else if (document.getElementById('t-from-field') && fromField) {
+          preservedAccountId = fromField.getValue() || null;
+          preservedToAccountId = toField ? (toField.getValue() || null) : null;
+        }
+      }
+      if (clearForNext_) {
+        clearForNext_ = false;
+        preservedTime = ''; preservedAmount = 0; preservedDesc = ''; preservedCounterparty = '';
+      }
+      function validAccountOr_(id, items, fallback) {
+        return id && items.some(function (i) { return i.value === id; }) ? id : fallback;
+      }
       if (kind === 'transfer') {
         container.innerHTML =
           '<div class="field" style="display:flex;gap:8px">' +
@@ -13706,9 +13730,14 @@
           '<div id="t-bill-field"></div>';
         setupMoneyInput(document.getElementById('t-amount'), preservedAmount);
         var accountItems = rankedAccountItems();
-        fromField = createCapsuleField(document.getElementById('t-from-field'), { items: accountItems });
+        var firstAcc_ = accountItems[0] ? accountItems[0].value : null;
+        fromField = createCapsuleField(document.getElementById('t-from-field'), {
+          items: accountItems,
+          selectedValue: validAccountOr_(preservedAccountId, accountItems, firstAcc_)
+        });
         toField = createCapsuleField(document.getElementById('t-to-field'), {
           items: accountItems,
+          selectedValue: validAccountOr_(preservedToAccountId, accountItems, firstAcc_),
           onChange: updateBillField
         });
         updateBillField();
@@ -13794,7 +13823,9 @@
         accountField = createCapsuleField(document.getElementById('t-account-field'), {
           allowDeselect: true,
           items: accItems,
-          selectedValue: null, // null explícito = começa sem nada selecionado (undefined cairia no padrão = items[0])
+          // null explícito = começa sem nada selecionado (undefined cairia no padrão = items[0]);
+          // a conta já escolhida antes (outro tipo / Salvar+) fica se ainda for uma opção daqui.
+          selectedValue: validAccountOr_(preservedAccountId, accItems, null),
           onChange: updateInstallmentsField
         });
         updateInstallmentsField();
@@ -13904,14 +13935,19 @@
 
     renderFields();
 
-    document.getElementById('m-submit').onclick = function () {
-      var submitBtn = document.getElementById('m-submit');
+    /** keepOpen (botão Salvar+): salva igual, mas em vez de fechar o menu limpa o formulário
+     *  pro próximo lançamento, mantendo tipo, data e conta. */
+    function submitTx_(keepOpen, submitBtn) {
       var amount = document.getElementById('t-amount').getValue();
       if (!amount || amount <= 0) { errorPopover(submitBtn, 'O valor precisa ser maior que zero.'); return; }
       if (kind === 'income' && stagedRefundLinksExceed_(stagedRefundLinks, amount)) {
         errorPopover(submitBtn, 'Os vínculos de reembolso passam do valor da receita. Reabra "Vincular" e ajuste.');
         return;
       }
+      // Foto do estado de agora: o trecho assíncrono abaixo roda DEPOIS de, no Salvar+, o
+      // formulário já ter sido limpo (kind/reembolsos/flags voltam ao zero pro próximo).
+      var kindS = kind, sharesS = stagedRefundShares, linksS = stagedRefundLinks,
+        rememberS = rememberCategoryForCounterparty, outlierS = outlierFlagged;
 
       var promise;
       var optimisticIds;
@@ -13942,6 +13978,7 @@
         ];
       } else {
         var installmentsField = document.getElementById('t-installments');
+        var installmentsVal2 = installmentsField ? installmentsField.value : 1;
         var dateVal2 = document.getElementById('t-date').value;
         var timeVal2 = document.getElementById('t-time').value;
         var descVal2 = capitalizeFirst_(document.getElementById('t-desc').value);
@@ -13961,17 +13998,17 @@
         promise = resolveRealIds_({ accountId: accId2, categoryId: catId2 }, ['accountId', 'categoryId']).then(function (resolved) {
           return forecastSelectionT_.then(function (forecastId) {
             return run('createTransaction', {
-              kind: kind, date: dateVal2, time: timeVal2, accountId: resolved.accountId, categoryId: resolved.categoryId, amount: amount,
-              description: descVal2, counterparty: counterpartyVal2, rememberCategoryForCounterparty: rememberCategoryForCounterparty,
-              installments: installmentsField ? installmentsField.value : 1, forecastId: forecastFieldsFromSelection_(forecastId, dateVal2).forecastId, forecastCycleMonth: forecastFieldsFromSelection_(forecastId, dateVal2).forecastCycleMonth, excludeFromAnalysis: outlierFlagged
+              kind: kindS, date: dateVal2, time: timeVal2, accountId: resolved.accountId, categoryId: resolved.categoryId, amount: amount,
+              description: descVal2, counterparty: counterpartyVal2, rememberCategoryForCounterparty: rememberS,
+              installments: installmentsVal2, forecastId: forecastFieldsFromSelection_(forecastId, dateVal2).forecastId, forecastCycleMonth: forecastFieldsFromSelection_(forecastId, dateVal2).forecastCycleMonth, excludeFromAnalysis: outlierS
             }).then(function (createdRows) {
               resolveCreatedTransactions_(optimisticIds, createdRows);
               // Pessoas nomeadas no popup "Reembolso?" (ver stagedRefundShares) só viram
               // RefundShares de verdade agora, encadeado — não existia passiveTransactionId
               // nenhum antes da despesa em si ser criada.
-              if (kind === 'expense' && stagedRefundShares.length) {
+              if (kindS === 'expense' && sharesS.length) {
                 var passiveId = createdRows[0].id;
-                return Promise.all(stagedRefundShares.map(function (s) {
+                return Promise.all(sharesS.map(function (s) {
                   if (s.personId) return resolveRealId_(s.personId);
                   return run('createPerson', { name: s.personName }).then(function (p) {
                     STATE.people.push({ id: p.ID, name: p.Name, archived: false });
@@ -13980,7 +14017,7 @@
                 })).then(function (personIds) {
                   return run('setRefundSharesForPassiveTransaction', {
                     passiveTransactionId: passiveId,
-                    shares: stagedRefundShares.map(function (s, i) { return { personId: personIds[i], expectedAmount: s.expectedAmount }; })
+                    shares: sharesS.map(function (s, i) { return { personId: personIds[i], expectedAmount: s.expectedAmount }; })
                   });
                 }).then(function (createdShares) {
                   createdShares.forEach(function (row) {
@@ -13996,12 +14033,12 @@
               // receita em si ser criada. resolveRealId_ por via das dúvidas: uma
               // Share recém-criada noutro popup, na mesma sessão, ainda pode estar
               // com ID temporário.
-              if (kind === 'income' && stagedRefundLinks.length) {
+              if (kindS === 'income' && linksS.length) {
                 var activeId = createdRows[0].id;
-                return Promise.all(stagedRefundLinks.map(function (a) { return resolveRealId_(a.shareId); })).then(function (shareIds) {
+                return Promise.all(linksS.map(function (a) { return resolveRealId_(a.shareId); })).then(function (shareIds) {
                   return run('setRefundLinksForActiveTransaction', {
                     activeTransactionId: activeId,
-                    allocations: stagedRefundLinks.map(function (a, i) { return { shareId: shareIds[i], amount: a.amount }; })
+                    allocations: linksS.map(function (a, i) { return { shareId: shareIds[i], amount: a.amount }; })
                   });
                 }).then(function (createdLinks) {
                   replaceOptimisticRefundLinks_(optimisticIds, activeId, createdLinks);
@@ -14030,7 +14067,20 @@
         registerTxCreation_(optimisticIds[0], promise);
         if (kind === 'income' && stagedRefundLinks.length) applyOptimisticRefundLinks_(optimisticIds[0], stagedRefundLinks);
       }
-      closeModal();
+      if (keepOpen) {
+        // Menu continua aberto: zera tudo menos tipo, data e conta (ver clearForNext_) e volta o foco no valor.
+        stagedRefundShares = []; stagedRefundLinks = [];
+        selectedForecastId = ''; rememberCategoryForCounterparty = false; outlierFlagged = false;
+        clearForNext_ = true;
+        renderFields();
+        var modalEl = document.querySelector('#modal-root .modal');
+        if (modalEl) modalEl.scrollTop = 0;
+        var amountField = document.getElementById('t-amount');
+        if (amountField) amountField.focus();
+        showToast('Lançamento salvo');
+      } else {
+        closeModal();
+      }
       render(); // já dispara loadTxList() se a view atual for o Extrato (ver renderTransactions)
       // Sucesso não precisa limpar/re-renderizar aqui de novo: resolveCreatedTransactions_
       // (dentro de promise, acima) já troca a prévia otimista pelo lançamento de verdade
@@ -14041,7 +14091,9 @@
         showToast(err.message, true);
         refreshAll().then(render);
       });
-    };
+    }
+    document.getElementById('m-submit').onclick = function () { submitTx_(false, document.getElementById('m-submit')); };
+    document.getElementById('m-submit-more').onclick = function () { submitTx_(true, document.getElementById('m-submit-more')); };
   }
 
   // ---------- swipe horizontal entre abas ----------
