@@ -127,6 +127,12 @@
   /* Texto de menus, linhas e botões não seleciona (segurar o dedo é a ação de "hover" no celular e, às vezes,
      selecionava o texto junto); só os campos de digitação continuam selecionáveis. */
   body { -webkit-user-select: none; user-select: none; -webkit-touch-callout: none; }
+  /* O navegador só assume o arrasto VERTICAL (rolagem) e o zoom de pinça; o horizontal é
+     entregue direto ao JavaScript (swipe de aba) sem esperar o navegador decidir se
+     ia rolar -- era uma das causas do atraso pra reconhecer o swipe. Áreas que rolam
+     na horizontal por conta própria (Resumo, linha do tempo) liberam os dois eixos. */
+  html, body { touch-action: pan-y pinch-zoom; }
+  #tx-calendar-weeks-wrap, .tree-tl-scroll { touch-action: pan-x pan-y pinch-zoom; }
   input, textarea, select, [contenteditable="true"] { -webkit-user-select: text; user-select: text; -webkit-touch-callout: default; }
 
   /* Reserva o espaço da barra de rolagem sempre, mesmo em telas curtas que não
@@ -14065,9 +14071,14 @@
    */
   // Mesma ordem da barra: Início, Extrato, Planejamento, Reembolsos e, no painel "Mais", Contas e Categorias.
   var SWIPE_TAB_ORDER_ = ['dashboard', 'transactions', 'budgets', 'refunds', 'accounts', 'categories'];
-  var SWIPE_DECIDE_THRESHOLD_PX_ = 8; // até aqui, ainda não decidiu se é gesto horizontal ou só rolagem vertical
+  var SWIPE_DECIDE_THRESHOLD_PX_ = 6; // até aqui, ainda não decidiu se é gesto horizontal ou só rolagem vertical
   var SWIPE_COMMIT_FRACTION_ = 0.35; // arrastar mais que isso da largura do painel já troca de aba ao soltar
+  // Um "empurrão" rápido também troca de aba, mesmo curto: velocidade (px/ms) e distância mínima.
+  var SWIPE_FLICK_VELOCITY_ = 0.45;
+  var SWIPE_FLICK_MIN_PX_ = 24;
   var SWIPE_ANIMATION_MS_ = 220;
+  // Áreas que já têm rolagem/arrasto horizontal próprio: o gesto que começa nelas NÃO troca de aba.
+  var SWIPE_NO_START_SELECTOR_ = '#tx-calendar-weeks-wrap, .tree-tl-scroll, .budget-cycle-wheel, input, textarea, select, [contenteditable="true"], [data-no-tab-swipe]';
   // Sem nenhum wheel novo por esse tempo = gesto de trackpad "solto" (wheel não tem um
   // touchend próprio). Valor pedido explicitamente pelo usuário (0,5s) -- dá margem
   // real pra não confundir uma cauda de inércia ainda ativa com silêncio de verdade.
@@ -14159,14 +14170,55 @@
     });
   }
 
+  /** true se o alvo está dentro de uma área que rola/arrasta na horizontal por conta própria
+   *  (Resumo, linha do tempo, roda de ciclo, campos...) -- nelas o gesto horizontal é DA área,
+   *  não troca de aba. Além da lista fixa, qualquer ancestral com overflow-x auto/scroll que
+   *  realmente tenha o que rolar conta. Para em #app (a página em si). */
+  function swipeInHorizontalScroller_(target) {
+    if (!target || !target.closest) return false;
+    if (target.closest(SWIPE_NO_START_SELECTOR_)) return true;
+    for (var el = target; el && el.id !== 'app' && el !== document.body && el !== document.documentElement; el = el.parentElement) {
+      if (el.scrollWidth > el.clientWidth + 1) {
+        var ox = getComputedStyle(el).overflowX;
+        if (ox === 'auto' || ox === 'scroll') return true;
+      }
+    }
+    return false;
+  }
+
+  /** Mover um elemento no DOM (tirar de #app, pôr num painel, devolver) zera o scrollLeft de
+   *  quem rola por dentro dele -- era o que "resetava" o Resumo num semi-swipe. Guarda a
+   *  posição (elemento + scrollLeft/Top) das áreas roláveis conhecidas pra devolver depois. */
+  function snapshotInnerScrolls_(root) {
+    var out = [];
+    if (!root || !root.querySelectorAll) return out;
+    root.querySelectorAll('#tx-calendar-weeks-wrap, .tree-tl-scroll, [style*="overflow-x"]').forEach(function (el) {
+      if (el.scrollLeft || el.scrollTop) out.push({ el: el, left: el.scrollLeft, top: el.scrollTop });
+    });
+    return out;
+  }
+  function restoreInnerScrolls_(list) {
+    (list || []).forEach(function (it) {
+      if (it.el.scrollLeft !== it.left) it.el.scrollLeft = it.left;
+      if (it.top && it.el.scrollTop !== it.top) it.el.scrollTop = it.top;
+    });
+  }
+  /** Move `el` para `parent` preservando a rolagem interna das áreas roláveis dele. */
+  function moveKeepingScroll_(el, parent) {
+    var snap = snapshotInnerScrolls_(el);
+    parent.appendChild(el);
+    restoreInnerScrolls_(snap);
+  }
+
   function onSwipeTouchStart_(e) {
     // Bloqueado (inclusive por já existir ALGUM gesto em andamento, de qualquer fonte —
     // ver isSwipeBlocked_) só significa "não começa um NOVO" — não mexe em nada que já
     // esteja em andamento por outra fonte (ex: um wheel ainda se acomodando).
     if (e.touches.length !== 1 || isSwipeBlocked_()) return;
     if (e.target && e.target.closest && e.target.closest('nav.tabbar, .tabbar-more')) return; // a barra de abas tem os próprios gestos
+    if (swipeInHorizontalScroller_(e.target)) return; // área com rolagem horizontal própria (ex: gráfico do Resumo)
     var t = e.touches[0];
-    swipe_ = { source: 'touch', phase: 'undecided', startX: t.clientX, startY: t.clientY, dx: 0 };
+    swipe_ = { source: 'touch', phase: 'undecided', startX: t.clientX, startY: t.clientY, dx: 0, lastX: t.clientX, lastT: Date.now(), vx: 0 };
   }
 
   function onSwipeTouchMove_(e) {
@@ -14185,12 +14237,28 @@
       swipe_.targetView = targetView;
       swipe_.originalView = STATE.currentView;
       hideTooltip_();
-      beginSwipeTransition_(swipe_);
+      // O desenho da aba de destino (pesado: gráficos etc.) fica pra DEPOIS do primeiro quadro --
+      // o painel já acompanha o dedo na hora, sem esperar esse render (era o "delay" do swipe).
+      beginSwipeTransition_(swipe_, true);
     }
     if (swipe_.phase !== 'horizontal') return;
-    e.preventDefault(); // suprime o scroll vertical da página enquanto o gesto é reconhecidamente horizontal
+    if (e.cancelable) e.preventDefault(); // suprime o scroll vertical da página enquanto o gesto é reconhecidamente horizontal
+    // velocidade (suavizada) pra reconhecer um "empurrão" rápido ao soltar
+    var now = Date.now(), dt = now - swipe_.lastT;
+    if (dt > 0) {
+      var inst = (t.clientX - swipe_.lastX) / dt;
+      swipe_.vx = swipe_.vx ? swipe_.vx * 0.6 + inst * 0.4 : inst;
+      swipe_.lastX = t.clientX; swipe_.lastT = now;
+    }
     swipe_.dx = clampSwipeDx_(rawDx, swipe_.direction, swipe_.paneWidth);
     updateSwipeTransform_(swipe_);
+  }
+
+  /** Troca ao soltar: arrastou além da fração da largura OU deu um empurrão rápido no
+   *  mesmo sentido do arrasto (mesmo curto). Pura (só números) -- testável. */
+  function swipeShouldCommit_(dx, paneWidth, direction, vx) {
+    if (Math.abs(dx) >= paneWidth * SWIPE_COMMIT_FRACTION_) return true;
+    return Math.abs(dx) >= SWIPE_FLICK_MIN_PX_ && Math.abs(vx) >= SWIPE_FLICK_VELOCITY_ && (vx < 0) === (direction < 0);
   }
 
   /** Clampa a MAGNITUDE do arrasto em paneWidth, e nunca deixa cruzar de volta pro
@@ -14206,7 +14274,7 @@
   function onSwipeTouchEnd_() {
     if (!swipe_ || swipe_.source !== 'touch') return;
     if (swipe_.phase === 'horizontal') {
-      var committed = Math.abs(swipe_.dx) >= swipe_.paneWidth * SWIPE_COMMIT_FRACTION_;
+      var committed = swipeShouldCommit_(swipe_.dx, swipe_.paneWidth, swipe_.direction, swipe_.vx || 0);
       finishSwipeTransition_(swipe_, committed);
     }
     swipe_ = null;
@@ -14275,6 +14343,8 @@
   }
 
   function onSwipeWheel_(e) {
+    // Roda/trackpad sobre uma área com rolagem horizontal própria (Resumo...) rola ELA, não troca de aba.
+    if (!swipe_ && swipeInHorizontalScroller_(e.target)) return;
     if (wheelVerticalLock_) {
       var lockDx = -e.deltaX, lockDy = e.deltaY;
       if (Math.abs(lockDy) >= Math.abs(lockDx)) {
@@ -14396,8 +14466,24 @@
     }, SWIPE_WHEEL_IDLE_MS_);
   }
 
-  function beginSwipeTransition_(s) {
+  /** Segunda metade do início da troca: desenha a aba de destino no #view-root novo e o põe no
+   *  painel de entrada. Separada pra poder rodar DEPOIS do primeiro quadro do arrasto (touch) --
+   *  idempotente; finishSwipeTransition_ também chama (se soltou antes de rodar). */
+  function completeSwipeIncoming_(s) {
+    if (!s.incomingPending) return;
+    s.incomingPending = false;
+    STATE.currentView = s.targetView;
+    render(); // desenha a aba de destino no #view-root novo -- já cuida de scroll/destaque da barra sozinho
+    // render() leu a rolagem da janela DEPOIS da página já ter encolhido (o #view-root antigo
+    // saiu de #app); a posição certa da aba de origem é a de antes do gesto.
+    scrollPositions_[s.originalView] = { x: s.scrollX0, y: s.scrollY0 };
+    moveKeepingScroll_(document.getElementById('view-root'), s.paneNew);
+    updateSwipeTransform_(s);
+  }
+
+  function beginSwipeTransition_(s, deferIncomingRender) {
     var appEl = document.getElementById('app');
+    s.scrollX0 = window.scrollX; s.scrollY0 = window.scrollY;
     var viewportW = document.documentElement.clientWidth;
     s.paneWidth = Math.min(viewportW, 720); // mesma largura de coluna que #app usa (max-width:720px)
     var paneLeft = (viewportW - s.paneWidth) / 2;
@@ -14437,31 +14523,39 @@
     // usuário estivesse rolado no meio de uma lista longa no momento do gesto.
     outgoingViewRoot.style.marginTop = (-window.scrollY) + 'px';
     outgoingViewRoot.id = 'view-root-outgoing'; // libera o id "view-root" pro novo, evita 2 elementos com o mesmo id ao mesmo tempo
-    s.paneOld.appendChild(outgoingViewRoot);
+    moveKeepingScroll_(outgoingViewRoot, s.paneOld); // mover zera a rolagem interna (Resumo...): devolve
     var incomingViewRoot = document.createElement('div');
     incomingViewRoot.id = 'view-root';
     appEl.appendChild(incomingViewRoot);
 
-    STATE.currentView = s.targetView;
-    render(); // desenha a aba de destino no #view-root novo -- já cuida de scroll/destaque da barra sozinho
-
-    s.paneNew.appendChild(document.getElementById('view-root'));
+    // Sem a dica de composição o navegador re-rasteriza os painéis a cada quadro do arrasto.
+    s.paneOld.style.willChange = 'transform';
+    s.paneNew.style.willChange = 'transform';
     updateSwipeTransform_(s);
+
+    s.incomingPending = true;
+    if (deferIncomingRender) {
+      // 1º quadro pinta com o painel já seguindo o dedo; só então o render pesado da aba de destino.
+      requestAnimationFrame(function () { setTimeout(function () { if (s.incomingPending) completeSwipeIncoming_(s); }, 0); });
+    } else {
+      completeSwipeIncoming_(s);
+    }
   }
 
   function updateSwipeTransform_(s) {
-    s.paneOld.style.transform = 'translateX(' + s.dx + 'px)';
+    s.paneOld.style.transform = 'translate3d(' + s.dx + 'px,0,0)';
     var newOffset = s.direction < 0 ? s.paneWidth : -s.paneWidth;
-    s.paneNew.style.transform = 'translateX(' + (newOffset + s.dx) + 'px)';
+    s.paneNew.style.transform = 'translate3d(' + (newOffset + s.dx) + 'px,0,0)';
   }
 
   function finishSwipeTransition_(s, committed) {
+    completeSwipeIncoming_(s); // se soltou antes do render da aba de destino ter rodado
     // Pode ser chamada com o gesto (wheel) ainda "vivo" (swipe_ !== null, só
     // decided=true) -- ver onSwipeWheel_: a cauda de inércia continua sendo absorvida
     // por ESTE mesmo gesto até o silêncio de verdade, em vez de precisar de um
     // cooldown à parte aqui.
     var finalDx = committed ? (s.direction < 0 ? -s.paneWidth : s.paneWidth) : 0;
-    var transition = 'transform ' + SWIPE_ANIMATION_MS_ + 'ms ease-out';
+    var transition = 'transform ' + SWIPE_ANIMATION_MS_ + 'ms cubic-bezier(0.22, 0.61, 0.36, 1)';
     s.paneOld.style.transition = transition;
     s.paneNew.style.transition = transition;
     s.dx = finalDx;
@@ -14473,7 +14567,7 @@
       var oldViewRoot = document.getElementById('view-root-outgoing');
       if (committed) {
         destroyChartsWithin_(oldViewRoot);
-        appEl.appendChild(newViewRoot); // tira do paneNew, devolve pro lugar de verdade -- já está com tudo certo (render() cuidou disso em beginSwipeTransition_)
+        moveKeepingScroll_(newViewRoot, appEl); // tira do paneNew, devolve pro lugar de verdade -- já está com tudo certo (render() cuidou disso em beginSwipeTransition_)
         // render() (lá em beginSwipeTransition_) já tinha restaurado o scroll certo da
         // aba destino -- mas mover os dois view-root pra fora do fluxo normal de #app
         // durante a animação esvaziava a altura rolável da página inteira, e o
@@ -14487,7 +14581,7 @@
         newViewRoot.remove();
         oldViewRoot.id = 'view-root';
         oldViewRoot.style.marginTop = ''; // desfaz o congelamento de scroll aplicado em beginSwipeTransition_
-        appEl.appendChild(oldViewRoot); // devolve o ORIGINAL intacto -- não precisa re-renderizar, só recolocar no lugar
+        moveKeepingScroll_(oldViewRoot, appEl); // devolve o ORIGINAL intacto (inclusive a rolagem do Resumo) -- não precisa re-renderizar, só recolocar no lugar
         // Desfaz só o que render() (chamado em beginSwipeTransition_) já tinha mudado --
         // STATE.currentView, scroll e destaque da barra -- sem reconstruir o conteúdo de
         // novo (o view-root antigo já está intacto e recolocado, ver acima).
