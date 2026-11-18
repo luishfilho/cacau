@@ -3488,6 +3488,9 @@
    * existe pra evitar.
    */
   function setupCounterpartySuggestions_(inputEl) {
+    // O navegador (Chrome no PC) abre o próprio histórico de preenchimento por cima do
+    // popover do app: desliga, só o do app aparece.
+    inputEl.setAttribute('autocomplete', 'off');
     var pop = null;
     var nav = null;
     function close() {
@@ -4528,6 +4531,35 @@
   function personName_(personId) {
     var p = STATE.people.find(function (x) { return x.id === personId; });
     return p ? p.name : '(pessoa removida)';
+  }
+  /** Nomes distintos (na ordem escolhida) das pessoas das partes de `allocations` ([{shareId, amount}]). */
+  function refundPeopleNames_(allocations) {
+    var names = [];
+    (allocations || []).forEach(function (a) {
+      var s = STATE.refundShares.find(function (x) { return x.id === a.shareId; });
+      var p = s && STATE.people.find(function (x) { return x.id === s.personId; });
+      if (p && p.name && names.indexOf(p.name) === -1) names.push(p.name);
+    });
+    return names;
+  }
+  /**
+   * Ao vincular reembolso numa receita, sugere "Recebido de" = a(s) pessoa(s) das partes
+   * vinculadas (várias: "A, B"). Nunca sobrescreve texto que o usuário digitou: só preenche
+   * se o campo estiver vazio, ou se ainda tiver exatamente o que ESTA função preencheu antes
+   * (guardado em data-auto-cp) -- aí troca junto com os vínculos. Dispara um "input" de
+   * verdade pros mesmos listeners de quando se escolhe uma sugestão (categoria etc.).
+   */
+  function autofillCounterpartyFromLinks_(inputEl, allocations) {
+    if (!inputEl) return;
+    var names = refundPeopleNames_(allocations);
+    var current = inputEl.value.trim();
+    var lastAuto = inputEl.dataset.autoCp || '';
+    if (current && current !== lastAuto) return;
+    var next = names.join(', ');
+    if (next === current) return;
+    inputEl.value = next;
+    inputEl.dataset.autoCp = next;
+    inputEl.dispatchEvent(new Event('input', { bubbles: true }));
   }
   function sharesOfPassive_(passiveTxId) {
     return STATE.refundShares.filter(function (s) { return s.passiveTransactionId === passiveTxId; });
@@ -6199,6 +6231,7 @@
           STATE.refundLinks = STATE.refundLinks.filter(function (l) { return l.activeTransactionId !== t.id; }).concat(tempEntries);
           render();
           renderRefundLinkButtonE_();
+          autofillCounterpartyFromLinks_(document.getElementById('e-counterparty'), allocations);
           afterMutation_(resolveRealId_(t.id).then(function (realId) {
             // setRefundLinksForActiveTransaction substitui TODOS os vínculos dessa
             // receita: editar pode ter desmarcado uma Share que antes estava vinculada —
@@ -13153,6 +13186,7 @@
         openRefundLinkPopup_(currentAmountP_, stagedRefundLinks, function (allocations) {
           stagedRefundLinks = allocations;
           renderRefundLinkButtonP_();
+          autofillCounterpartyFromLinks_(document.getElementById('p-counterparty'), allocations);
         });
       };
     }
@@ -13675,6 +13709,7 @@
         openRefundLinkPopup_(currentAmount_, stagedRefundLinks, function (allocations) {
           stagedRefundLinks = allocations;
           renderRefundLinkButton_();
+          autofillCounterpartyFromLinks_(document.getElementById('t-counterparty'), allocations);
         });
       };
     }
