@@ -2327,6 +2327,7 @@
   function captureViewSnapshot_() {
     viewSnapshotTimer_ = null;
     if (document.getElementById('swipe-overlay')) return;
+    if (typeof swipe_ !== 'undefined' && swipe_) { scheduleViewSnapshot_(); return; } // dedo na tela: a cópia pesada espera
     var root = document.getElementById('view-root');
     if (!root || !root.firstChild) return;
     var copy = root.cloneNode(true);
@@ -2342,7 +2343,21 @@
       if (!img.style.height) img.style.height = live[i].clientHeight + 'px';
       dead[i].parentNode.replaceChild(img, dead[i]);
     }
+    // Só o que cabe perto da tela: o painel do deslize só mostra a primeira tela, e clonar/pintar um Extrato inteiro a cada
+    // gesto era o que ainda travava o dedo no celular.
+    trimSnapshotBelow_(root, copy, window.scrollY + window.innerHeight * 2, 0);
     viewSnapshots_[STATE.currentView] = copy;
+  }
+  /** Percorre a árvore viva e a cópia em paralelo (mesma forma) e apaga da cópia tudo que começa abaixo de `limitY` (coordenada da página). */
+  function trimSnapshotBelow_(live, copy, limitY, depth) {
+    if (depth > 6 || live.children.length !== copy.children.length) return;
+    var sy = window.scrollY;
+    for (var i = copy.children.length - 1; i >= 0; i--) {
+      var r = live.children[i].getBoundingClientRect();
+      if (r.height === 0 && r.top === 0) continue; // oculto / sem caixa: deixa como está
+      if (r.top + sy > limitY) copy.removeChild(copy.children[i]);
+      else if (r.bottom + sy > limitY) trimSnapshotBelow_(live.children[i], copy.children[i], limitY, depth + 1);
+    }
   }
   /** Reagenda a foto da aba atual: só tira quando a tela ficar quieta (contagens e entradas animadas já terminaram). */
   function scheduleViewSnapshot_() {
@@ -2352,6 +2367,8 @@
       else captureViewSnapshot_();
     }, 1500);
   }
+  // Rolou: a foto (cortada perto da tela) precisa acompanhar -- tira de novo quando a rolagem para.
+  window.addEventListener('scroll', function () { if (!swipeRendering_ && !document.getElementById('swipe-overlay')) scheduleViewSnapshot_(); }, { passive: true });
   function motionAfterRender_(sameView) {
     if (!motionOk_ || swipeRendering_) return;
     var root = document.getElementById('view-root');
@@ -16220,26 +16237,34 @@
     s.dx = finalDx;
     updateSwipeTransform_(s);
 
+    // O render de verdade da aba de destino roda JÁ NO COMEÇO do deslize (logo depois do 1º quadro dele), não no fim: o deslize é só
+    // transform e corre no compositor, então continua suave mesmo com a thread principal ocupada; o que atrás do overlay (#app) muda
+    // não repinta o overlay. Antes o render vinha depois dos 220 ms e congelava a tela (e o toque) por ~meio segundo no fim.
+    var renderTarget = function () {
+      if (!committed || s.rendered) return;
+      s.rendered = true;
+      STATE.currentView = s.targetView;
+      var chartAnimBefore = window.Chart && Chart.defaults ? Chart.defaults.animation : undefined;
+      if (window.Chart && Chart.defaults) Chart.defaults.animation = false;
+      swipeRendering_ = true;
+      try {
+        render();
+      } finally {
+        swipeRendering_ = false;
+        if (window.Chart && Chart.defaults) Chart.defaults.animation = chartAnimBefore;
+      }
+    };
+    if (committed) requestAnimationFrame(function () { setTimeout(renderTarget, 0); });
+
     setTimeout(function () {
       var appEl = document.getElementById('app');
       var newViewRoot = document.getElementById('view-root'); // vazio, em #app (a foto é que está no painel)
       var oldViewRoot = document.getElementById('view-root-outgoing');
       if (committed) {
+        renderTarget(); // se o render ainda não rodou (aba em segundo plano, quadro atrasado), roda agora
         destroyChartsWithin_(oldViewRoot);
         oldViewRoot.remove();
-        // Agora sim o render de verdade da aba de destino, ainda escondido atrás do overlay (que mostra a foto): a troca da foto
-        // pelo conteúdo vivo acontece num único quadro, quando o overlay sai. Sem cascata, contagem nem animação de gráfico.
-        STATE.currentView = s.targetView;
-        var chartAnimBefore = window.Chart && Chart.defaults ? Chart.defaults.animation : undefined;
-        if (window.Chart && Chart.defaults) Chart.defaults.animation = false;
-        swipeRendering_ = true;
-        try {
-          render();
-        } finally {
-          swipeRendering_ = false;
-          if (window.Chart && Chart.defaults) Chart.defaults.animation = chartAnimBefore;
-        }
-        // render() leu a rolagem da janela com a página já encolhida (o view-root antigo saiu de #app): a posição certa
+        // render() leu a rolagem da janela com a página encolhida (o view-root antigo estava fora de #app): a posição certa
         // da aba de origem é a de antes do gesto. E a de destino é restaurada de novo, já com #app cheio.
         scrollPositions_[s.originalView] = { x: s.scrollX0, y: s.scrollY0 };
         var restoreNew = scrollPositions_[s.targetView] || { x: 0, y: 0 };
