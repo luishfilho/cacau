@@ -2718,6 +2718,8 @@ function listPendingEntries() {
   var allMappings = readAll_('CounterpartyMappings');
   var allAliases = readAll_('CounterpartyAliases');
   var allBankAppMappings = readAll_('BankAppMappings');
+  var samplesByApp = {};
+  readAll_('BankAppSamples').forEach(function (s) { (samplesByApp[String(s.AppIdentifier || '')] = samplesByApp[String(s.AppIdentifier || '')] || []).push(s); });
 
   var pendingRows = readAll_('PendingEntries');
   var notificationContext = buildNotificationContext_(pendingRows, allMappings, allAliases);
@@ -2731,8 +2733,14 @@ function listPendingEntries() {
     var derived = deriveNotificationFields_(p, notificationContext);
     // Mesma ideia pra conta lembrada (BankAppMappings): se não veio gravada, procura na
     // hora — sem isso, pendência crua de um app já mapeado nunca sugeriria a conta certa.
+    var accountGuess = false;
     var suggestedAccountId = p.SuggestedAccountID || (function () {
       var mapping = allBankAppMappings.find(function (m) { return m.AppIdentifier === p.App; });
+      // App com mais de uma conta (corrente + cartão): decide pelas palavras da notificação
+      // (suggestAccountForNotification_); sem histórico nenhum, cai na conta lembrada, como sempre.
+      var sug = suggestAccountForNotification_(derived.combinedText, samplesByApp[String(p.App || '')],
+        accountsById, { mappedAccountId: mapping ? mapping.AccountID : '', kind: derived.kind });
+      if (sug) { accountGuess = sug.guess; return sug.accountId; }
       return mapping ? mapping.AccountID : '';
     })();
     var acc = accountsById[suggestedAccountId];
@@ -2764,6 +2772,7 @@ function listPendingEntries() {
       suggestedKind: derived.kind || null,
       suggestedAccountId: suggestedAccountId || null,
       suggestedAccountName: acc ? acc.Name : null,
+      accountGuess: accountGuess,
       counterparty: derived.counterparty || null,
       establishmentName: establishmentName || null,
       suggestedCategoryId: suggestedCategoryId || null,
@@ -2776,6 +2785,94 @@ function listPendingEntries() {
   }).sort(function (a, b) { return a.capturedAt < b.capturedAt ? 1 : -1; });
 
   return markDuplicatePendingEntries_(entries);
+}
+
+// ---------- qual conta (corrente ou cartão) é essa notificação? ----------
+// Camada 1: o app da notificação lembra a conta (BankAppMappings, e agora todas as contas já usadas, em
+// BankAppSamples). Camada 2: quando o MESMO app já foi confirmado em mais de uma conta (ex: Nubank conta + cartão),
+// compara as palavras da notificação nova com as das já confirmadas de cada conta (naive Bayes simples) e, antes
+// de haver histórico, usa dicas embutidas (crédito/fatura/parcela puxam pro cartão; pix/débito/saque pra conta).
+var BANK_APP_SAMPLE_CAP_ = 30;
+var BANK_ACCOUNT_CONFIDENT_MARGIN_ = 0.8;  // diferença (em ln) entre a 1ª e a 2ª conta pra não marcar "confira"
+var BANK_ACCOUNT_HINT_WEIGHT_ = 0.7;       // peso de cada dica embutida (no máximo 2 contam)
+var CARD_HINT_WORDS_ = ['crédito', 'credito', 'cartão', 'cartao', 'fatura', 'parcela', 'parcelado', 'parcelada', 'limite'];
+var CHECKING_HINT_WORDS_ = ['pix', 'débito', 'debito', 'transferência', 'transferencia', 'transferiu', 'saque', 'ted', 'boleto', 'saldo'];
+var NOTIFICATION_STOPWORDS_ = { com: true, para: true, por: true, uma: true, dos: true, das: true, seu: true, sua: true, que: true, nos: true, nas: true, num: true, foi: true };
+
+/** Palavras da notificação que servem de pista: sem números/valores, sem pontuação, sem palavrinhas soltas. */
+function notificationSignalTokens_(text) {
+  var seen = {}, out = [];
+  notificationTokens_(text).forEach(function (t) {
+    if (!t.norm || t.numeric || t.punct || t.norm === '#' || t.norm.length < 3 || NOTIFICATION_STOPWORDS_[t.norm] || seen[t.norm]) return;
+    seen[t.norm] = true;
+    out.push(t.norm);
+  });
+  return out;
+}
+
+/**
+ * samples: linhas de BankAppSamples DO MESMO APP ({AccountID, Text, CreatedAt}). accountsById: contas existentes.
+ * opts.mappedAccountId: conta lembrada em BankAppMappings (entra como candidata mesmo sem amostras).
+ * opts.kind: 'income' tira cartões de crédito (receita nunca vai pro cartão).
+ * Devolve { accountId, guess } -- guess=true quando a diferença pra 2ª opção é pequena (palpite, "confira") --
+ * ou null quando não há nenhuma conta candidata (sem histórico nenhum).
+ */
+function suggestAccountForNotification_(text, samples, accountsById, opts) {
+  opts = opts || {};
+  var stats = {}; // accountId -> { n, counts, last }
+  var usable = function (id) { return !!accountsById[id] && String(accountsById[id].Archived).toLowerCase() !== 'true'; };
+  (samples || []).forEach(function (s) {
+    var id = String(s.AccountID || '');
+    if (!id || !usable(id)) return;
+    var st = stats[id] = stats[id] || { n: 0, counts: {}, last: '' };
+    st.n++;
+    if (String(s.CreatedAt || '') > st.last) st.last = String(s.CreatedAt || '');
+    notificationSignalTokens_(s.Text).forEach(function (tok) { st.counts[tok] = (st.counts[tok] || 0) + 1; });
+  });
+  if (opts.mappedAccountId && usable(opts.mappedAccountId) && !stats[opts.mappedAccountId]) {
+    stats[opts.mappedAccountId] = { n: 0, counts: {}, last: '' };
+  }
+  var ids = Object.keys(stats).filter(function (id) {
+    return !(opts.kind === 'income' && accountsById[id].Type === 'credit_card');
+  });
+  if (!ids.length) return null;
+  if (ids.length === 1) return { accountId: ids[0], guess: false };
+
+  var tokens = notificationSignalTokens_(text);
+  var total = ids.reduce(function (sum, id) { return sum + stats[id].n; }, 0);
+  var hasCard = ids.some(function (id) { return accountsById[id].Type === 'credit_card'; });
+  var hasOther = ids.some(function (id) { return accountsById[id].Type !== 'credit_card'; });
+  var cardHits = 0, otherHits = 0;
+  if (hasCard && hasOther) {
+    tokens.forEach(function (tok) {
+      if (CARD_HINT_WORDS_.indexOf(tok) !== -1) cardHits++;
+      if (CHECKING_HINT_WORDS_.indexOf(tok) !== -1) otherHits++;
+    });
+  }
+  var scored = ids.map(function (id) {
+    var st = stats[id];
+    var score = Math.log((st.n + 1) / (total + ids.length));
+    tokens.forEach(function (tok) {
+      var seenAnywhere = ids.some(function (other) { return stats[other].counts[tok]; });
+      if (seenAnywhere) score += Math.log(((st.counts[tok] || 0) + 1) / (st.n + 2));
+    });
+    var isCard = accountsById[id].Type === 'credit_card';
+    if (hasCard && hasOther) score += BANK_ACCOUNT_HINT_WEIGHT_ * Math.min(2, isCard ? cardHits : otherHits);
+    return { id: id, score: score, last: stats[id].last };
+  });
+  scored.sort(function (a, b) { return b.score - a.score || (a.last < b.last ? 1 : -1); });
+  return { accountId: scored[0].id, guess: scored[0].score - scored[1].score < BANK_ACCOUNT_CONFIDENT_MARGIN_ };
+}
+
+/** Guarda a notificação confirmada como amostra da conta (e poda: no máximo BANK_APP_SAMPLE_CAP_ por app+conta). */
+function recordBankAppSample_(app, accountId, text) {
+  text = String(text || '').trim().slice(0, 300);
+  if (!app || !accountId || !text) return;
+  appendRow_('BankAppSamples', { AppIdentifier: app, AccountID: accountId, Text: text });
+  var mine = readAll_('BankAppSamples').filter(function (s) { return s.AppIdentifier === app && s.AccountID === accountId; });
+  if (mine.length <= BANK_APP_SAMPLE_CAP_) return;
+  mine.sort(function (a, b) { return String(a.CreatedAt) < String(b.CreatedAt) ? -1 : 1; });
+  mine.slice(0, mine.length - BANK_APP_SAMPLE_CAP_).forEach(function (s) { deleteRowById_('BankAppSamples', s.ID); });
 }
 
 /**
@@ -2822,6 +2919,8 @@ function confirmPendingEntry(input) {
     } else {
       appendRow_('BankAppMappings', { AppIdentifier: pending.App, AccountID: accountToRemember });
     }
+    // Camada 2: guarda o texto como amostra da conta, pra distinguir conta corrente de cartão do mesmo app depois.
+    recordBankAppSample_(pending.App, accountToRemember, ((pending.Title || '') + ' ' + (pending.Text || '')).trim());
   }
 
   if (input.rememberCategoryForCounterparty && counterparty && input.kind !== 'transfer' && input.categoryId) {
@@ -3889,6 +3988,14 @@ var SCHEMA = {
   ProcessedEmailMessages: ['ID', 'MessageId', 'CreatedAt'],
   // Lembra qual conta usar por padrão pra notificações de um determinado app de banco.
   BankAppMappings: ['ID', 'AppIdentifier', 'AccountID', 'CreatedAt'],
+  // Notificações já confirmadas, uma linha por (app, conta, texto) -- base do aprendizado de qual conta
+  // (corrente ou cartão) o texto de um app com várias contas costuma ser (ver suggestAccountForNotification_,
+  // Inbox.js). Guarda no máximo BANK_APP_SAMPLE_CAP_ linhas por (app, conta): as mais antigas saem.
+  BankAppSamples: ['ID', 'AppIdentifier', 'AccountID', 'Text', 'CreatedAt'],
+  // Notificações já confirmadas, uma linha por (app, conta, texto) -- base do aprendizado de qual conta
+  // (corrente ou cartão) o texto de um app com várias contas costuma ser (ver suggestAccountForNotification_, Inbox.js).
+  // Guarda no máximo BANK_APP_SAMPLE_CAP_ linhas por (app, conta): as mais antigas saem.
+  BankAppSamples: ['ID', 'AppIdentifier', 'AccountID', 'Text', 'CreatedAt'],
   // Lembra qual categoria usar por padrão pra lançamentos de uma mesma pessoa/estabelecimento.
   CounterpartyMappings: ['ID', 'CounterpartyName', 'CategoryID', 'CreatedAt'],
   // Lembra o nome de verdade de um estabelecimento pro texto CRU que chega automático (ex:
