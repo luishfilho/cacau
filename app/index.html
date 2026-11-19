@@ -368,6 +368,14 @@
     color: var(--text);
     margin-bottom: 12px;
   }
+  /* Campo de escolha do app (no lugar do <select> nativo; ver appSelectHtml_): parece um campo, abre o menu do app. */
+  button.app-select {
+    display: flex; align-items: center; justify-content: space-between; gap: 8px; width: 100%;
+    margin-bottom: 12px; padding: 10px 12px; border-radius: 8px; text-align: left;
+    background: var(--surface); color: var(--text); border: 1px solid var(--border);
+  }
+  button.app-select .app-select-label { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  button.app-select svg { width: 16px; height: 16px; flex-shrink: 0; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; color: var(--text-muted); }
   /* box-sizing pro padding não estourar a largura do modal; resize vertical só. */
   textarea { box-sizing: border-box; resize: vertical; }
   /* Texto de exemplo dos campos: cinza, claramente diferente do que a pessoa digita. */
@@ -679,6 +687,8 @@
     stroke-linejoin: round;
   }
   svg.inline-icon { width: 1.1em; height: 1.1em; vertical-align: -0.2em; }
+  /* Ícone do tipo de conta (card Contas do Início). */
+  svg.acc-type-ico { width: 1.15em; height: 1.15em; vertical-align: -0.2em; margin-right: 6px; fill: none; stroke: var(--text-muted); stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
   /* Tema (em cima) e configurações (embaixo) empilhados no canto do lado da barra
      lateral; 8px de borda + 36px de largura = centro a 26px, o mesmo da barra. */
   .theme-toggle-btn {
@@ -718,6 +728,9 @@
   #boot-splash .boot-fill.boot-finish { transition: height .55s ease-out; }
   /* Mensagem do Início: direto no fundo do app, acima do 1º card; branco no escuro e preto no claro (var(--text)). */
   .home-msg { font-size: 26px; line-height: 1.25; font-weight: 700; color: var(--text); text-align: left; margin: 6px 2px 18px; }
+  /* Ícone monocromático (traço da cor do texto) antes da frase; a parte iluminada da lua é preenchida. */
+  svg.home-msg-ico { width: 0.9em; height: 0.9em; vertical-align: -0.1em; margin-right: 8px; fill: none; stroke: currentColor; stroke-width: 1.7; stroke-linecap: round; stroke-linejoin: round; }
+  svg.home-msg-ico .moon-lit { fill: currentColor; }
   .home-msg-in { animation: home-msg-fade 0.9s ease-out both; }
   @keyframes home-msg-fade { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
   @media (prefers-reduced-motion: reduce) { .home-msg-in { animation: none; } }
@@ -1466,15 +1479,19 @@
   .budget-value-side { flex: 1 1 auto; min-width: 0; display: flex; flex-direction: column; gap: 8px; }
   .budget-value-side .kind-toggle { flex-direction: column; gap: 4px; margin: 0; }
   .budget-value-side .kind-toggle button { padding: 4px 0; font-size: 10px; white-space: nowrap; overflow: hidden; }
-  .budget-value-side .budget-switch { flex-direction: row; align-items: center; justify-content: center; gap: 8px; min-height: 0; margin: 0; font-size: 10px; line-height: 1.2; }
-  .budget-value-side .budget-switch span { flex: 1 1 auto; min-width: 0; text-align: center; overflow-wrap: anywhere; }
+  .budget-value-side .budget-switch { flex-direction: row; align-items: center; justify-content: center; gap: 8px; min-height: 0; margin: 0; font-size: 13px; line-height: 1.25; }
+  .budget-value-side .budget-switch span { flex: 0 1 auto; min-width: 0; text-align: left; overflow-wrap: anywhere; }
   .budget-start-step:disabled { opacity: 0.4; cursor: default; }
   .budget-switch { display: flex; align-items: center; justify-content: space-between; gap: 8px; min-height: 28px; margin: 8px 0 0; font-size: 11px; line-height: 1.25; cursor: pointer; }
   .budget-switch.is-hidden { visibility: hidden; pointer-events: none; }
-  .budget-switch input { -webkit-appearance: none; appearance: none; position: relative; flex: 0 0 auto; width: 36px; min-width: 36px; height: 20px; margin: 0; padding: 0; border: none; border-radius: 999px; background: var(--border); cursor: pointer; transition: background 0.15s; }
-  .budget-switch input::after { content: ''; position: absolute; top: 2px; left: 2px; width: 16px; height: 16px; border-radius: 50%; background: #fff; transition: transform 0.15s; }
-  .budget-switch input:checked { background: var(--primary); }
-  .budget-switch input:checked::after { transform: translateX(16px); }
+  .budget-switch input, .settings-switch input { -webkit-appearance: none; appearance: none; position: relative; flex: 0 0 auto; width: 36px; min-width: 36px; height: 20px; margin: 0; padding: 0; border: none; border-radius: 999px; background: var(--border); cursor: pointer; transition: background 0.15s; }
+  .budget-switch input::after, .settings-switch input::after { content: ''; position: absolute; top: 2px; left: 2px; width: 16px; height: 16px; border-radius: 50%; background: #fff; transition: transform 0.15s; }
+  .budget-switch input:checked, .settings-switch input:checked { background: var(--primary); }
+  .budget-switch input:checked::after, .settings-switch input:checked::after { transform: translateX(16px); }
+  /* Toggle de Configurações: o botão fica colado no texto (à esquerda dele), não solto no outro canto. */
+  .settings-switch { display: flex; align-items: flex-start; gap: 10px; padding: 6px 0; cursor: pointer; }
+  .settings-switch input { margin-top: 1px; }
+  .settings-switch .grow { flex: 1; min-width: 0; }
   .budget-start-row { display: flex; align-items: center; gap: 8px; margin-bottom: 10px; }
   .budget-start-step { flex: 0 0 auto; display: flex; align-items: center; justify-content: center; width: 38px; height: 38px; padding: 0; border-radius: 50%; line-height: 0; }
   /* − + ‹ › são SVG (ver BUDGET_STEP_ICONS_), centralizados pelo flex do botão. */
@@ -1702,7 +1719,7 @@
   @media (prefers-reduced-motion: no-preference) {
     /* Botões A · afundar: a propriedade `scale` compõe com o transform que vários botões já usam. */
     button { transition: scale .12s ease; }
-    button:not(:disabled):active { scale: .93; }
+    button:not(:disabled):active { scale: .86; }
     /* Troca de aba D · cascata: cada bloco da tela sobe, um depois do outro. */
     .view-enter > * { animation: view-rise .42s cubic-bezier(.2,.8,.2,1) backwards; }
     .view-enter > *:nth-child(2) { animation-delay: .06s; }
@@ -1712,11 +1729,16 @@
     .view-enter > *:nth-child(6) { animation-delay: .30s; }
     .view-enter > *:nth-child(n+7) { animation-delay: .36s; }
     @keyframes view-rise { from { opacity: 0; transform: translateY(16px); } }
-    /* Abrir janelas B · zoom a partir do toque (a origem é calculada em openModal). */
-    .modal.modal-pop { animation: modal-zoom .34s cubic-bezier(.2,.8,.2,1) backwards; transform-origin: 90% 100%; }
+    /* Abrir janelas · sobe da base da tela (a janela já nasce encostada embaixo; nas centralizadas, sobe um pouco). */
+    .modal.modal-pop { animation: modal-rise .38s cubic-bezier(.2,.8,.2,1) backwards; }
     .modal-backdrop.modal-pop-bd { animation: modal-fade .25s ease backwards; }
-    @keyframes modal-zoom { from { transform: scale(.06); opacity: 0; } }
+    @keyframes modal-rise { from { transform: translateY(100%); opacity: .6; } }
+    .modal-backdrop.modal-center .modal.modal-pop { animation-name: modal-rise-short; }
+    @keyframes modal-rise-short { from { transform: translateY(56px); opacity: 0; } }
     @keyframes modal-fade { from { opacity: 0; } }
+    /* Tooltips · surgem com um leve zoom/subida (a origem fica do lado da seta). */
+    .shared-tooltip { animation: tip-in .16s ease-out backwards; }
+    @keyframes tip-in { from { opacity: 0; transform: translateY(4px) scale(.92); } }
     /* Avisos A · descem do topo e saem para cima. */
     .toast { animation: toast-drop .4s cubic-bezier(.2,.8,.2,1) backwards; transition: opacity .3s ease, transform .3s ease; }
     .toast.toast-fade-out { transform: translateY(-26px); }
@@ -1725,11 +1747,20 @@
     .view-enter .budget-ring .bc-fill { stroke-dasharray: 1 1; animation: ring-draw .9s cubic-bezier(.34,1.3,.64,1) backwards; }
     @keyframes ring-draw { from { stroke-dashoffset: 1; } }
   }
-  /* Hover C · sublinhado que cresce embaixo da linha clicável (só com mouse). */
+  /* Hover (só com mouse): lançamentos -- o ícone da categoria balança; demais linhas clicáveis -- deslizam pra direita
+     com uma barrinha na lateral. */
   @media (hover: hover) and (prefers-reduced-motion: no-preference) {
-    .row-clickable { position: relative; }
-    .row-clickable::after { content: ''; position: absolute; left: 0; bottom: -1px; height: 2px; width: 100%; background: var(--primary); transform: scaleX(0); transform-origin: left; transition: transform .25s ease; pointer-events: none; }
-    .row-clickable:hover::after { transform: scaleX(1); }
+    .row-clickable { position: relative; transition: transform .2s ease; }
+    .row-clickable[data-tx]:hover strong svg { animation: icon-wiggle .6s; transform-origin: 50% 60%; }
+    @keyframes icon-wiggle {
+      0%, 100% { transform: rotate(0); }
+      20% { transform: rotate(-18deg) scale(1.15); }
+      45% { transform: rotate(14deg) scale(1.15); }
+      70% { transform: rotate(-8deg); }
+    }
+    .row-clickable:not([data-tx]):hover { transform: translateX(9px); }
+    .row-clickable:not([data-tx])::before { content: ''; position: absolute; left: -9px; top: 0; bottom: 0; width: 3px; border-radius: 2px; background: var(--primary); transform: scaleY(0); transition: transform .2s ease; pointer-events: none; }
+    .row-clickable:not([data-tx]):hover::before { transform: scaleY(1); }
   }
 </style>
 
@@ -1859,6 +1890,20 @@
     checking: 'Conta corrente', savings: 'Poupança', cash: 'Dinheiro',
     credit_card: 'Cartão de crédito', investment: 'Investimento'
   };
+  // Ícones (traço único, cor do texto) de cada tipo de conta -- no lugar do "(Conta corrente)" ao lado do nome.
+  var ACCOUNT_TYPE_ICONS_ = {
+    checking: '<path d="M3 10l9-6 9 6"/><path d="M5 10v8M9.5 10v8M14.5 10v8M19 10v8"/><path d="M3 20h18"/>',
+    savings: '<circle cx="9" cy="9" r="5"/><path d="M15.5 7.5a5 5 0 1 1-3.4 8.9"/><path d="M9 7v4M7.5 8.5h3"/>',
+    cash: '<rect x="2.5" y="6" width="19" height="12" rx="2"/><circle cx="12" cy="12" r="2.6"/><path d="M6 9.5v.01M18 14.5v.01"/>',
+    credit_card: '<rect x="2.5" y="5" width="19" height="14" rx="2.5"/><path d="M2.5 10h19M6 15h4"/>',
+    investment: '<path d="M3 17l6-6 4 4 8-8"/><path d="M15 7h6v6"/>'
+  };
+  function accountTypeIconHtml_(type) {
+    var path = ACCOUNT_TYPE_ICONS_[type];
+    if (!path) return '';
+    var label = escapeHtml(ACCOUNT_TYPE_LABELS[type] || '');
+    return '<svg class="acc-type-ico" viewBox="0 0 24 24" role="img" aria-label="' + label + '" data-tooltip="' + label + '">' + path + '</svg>';
+  }
   var STATUS_LABELS = { aberta: 'Aberta', fechada: 'Fechada', paga: 'Paga', atrasada: 'Atrasada' };
   var TX_PAGE_SIZE = 50; // ver STATE.txVisibleCount / "Carregar mais" no Extrato
 
@@ -2076,6 +2121,14 @@
     if (!el.classList.contains('row-clickable') && getComputedStyle(el).cursor !== 'pointer') return;
     shineElement_(el);
   }, true);
+  // Brilho também ao PASSAR O MOUSE num card clicável (o toque abre menu/janela por cima e o brilho quase não era visto).
+  if (window.matchMedia && window.matchMedia('(hover: hover)').matches) document.addEventListener('mouseover', function (e) {
+    if (!motionOk_ || !e.target.closest) return;
+    var card = e.target.closest('.card');
+    if (!card || (e.relatedTarget && card.contains(e.relatedTarget))) return;
+    if (getComputedStyle(card).cursor !== 'pointer') return;
+    shineElement_(card);
+  });
   /** Chaves e chips B · a bolinha da chave estica no caminho (usa o ::after do próprio input). */
   document.addEventListener('change', function (e) {
     var t = e.target;
@@ -2096,6 +2149,33 @@
     var n = parseFloat(String(text).replace(/[^\d,-]/g, '').replace(',', '.'));
     return isFinite(n) ? n : null;
   }
+  /** Troca só a parte numérica ("1.234,56") de um texto como "- R$ 1.234,56*", preservando sinal, moeda e "*". */
+  function replaceMoneyDigits_(text, value) {
+    var digits = fmtMoney(value).match(/\d[\d.]*,\d{2}/);
+    return digits ? text.replace(/\d[\d.]*,\d{2}/, digits[0]) : text;
+  }
+  function countUpExtratoValues_(root) {
+    var els = root.querySelectorAll('.row .amount-income, .row .amount-expense, .row .amount-neutral');
+    var vh = window.innerHeight, shown = 0;
+    for (var i = 0; i < els.length && shown < 25; i++) {
+      var el = els[i];
+      if (el.children.length) continue;
+      var r = el.getBoundingClientRect();
+      if (r.bottom < 0 || r.top > vh) continue;
+      var text = el.textContent, value = parseMoney_(text.replace(/^[+-]\s*/, ''));
+      if (value === null) continue;
+      shown++;
+      (function (el, text, value) {
+        var t0 = performance.now();
+        (function step(now) {
+          var k = Math.min(1, (now - t0) / 700);
+          el.textContent = k < 1 ? replaceMoneyDigits_(text, value * (1 - Math.pow(1 - k, 3))) : text;
+          if (k < 1 && el.isConnected) requestAnimationFrame(step);
+          else el.textContent = text;
+        })(t0);
+      })(el, text, value);
+    }
+  }
   function motionAfterRender_(sameView) {
     if (!motionOk_) return;
     var root = document.getElementById('view-root');
@@ -2105,6 +2185,9 @@
       clearTimeout(viewEnterTimer_);
       viewEnterTimer_ = setTimeout(function () { root.classList.remove('view-enter'); }, 1100);
     }
+    // Extrato: mesma contagem nos valores das linhas, só ao ENTRAR na aba (não ao filtrar/buscar) e só nas que
+    // aparecem na tela -- contar centenas de linhas de uma vez pesaria à toa.
+    if (!sameView && STATE.currentView === 'transactions') countUpExtratoValues_(root);
     var els = root.querySelectorAll('.accounts-sum-part > span:last-child, .balance-total');
     for (var i = 0; i < els.length; i++) {
       (function (el, key) {
@@ -2129,16 +2212,11 @@
       })(els[i], STATE.currentView + ':' + i);
     }
   }
-  /** Chamada ao abrir uma janela: zoom a partir do último toque (Abrir janelas B). */
+  /** Chamada ao abrir uma janela: a janela sobe da base da tela (animação em CSS, pela classe). */
   function modalOpenMotion_(root, hadModal) {
     if (!motionOk_ || hadModal) return;
     var m = root.querySelector('.modal'), bd = root.querySelector('.modal-backdrop');
     if (!m) return;
-    var r = m.getBoundingClientRect();
-    if (lastPointer_ && Date.now() - lastPointer_.t < 2500) {
-      var ox = Math.max(0, Math.min(r.width, lastPointer_.x - r.left)), oy = Math.max(0, Math.min(r.height, lastPointer_.y - r.top));
-      m.style.transformOrigin = Math.round(ox) + 'px ' + Math.round(oy) + 'px';
-    }
     m.classList.add('modal-pop');
     if (bd) bd.classList.add('modal-pop-bd');
   }
@@ -2441,10 +2519,10 @@
    * Com mouse, hover mostra o tooltip e o clique rola, como sempre.
    */
   var DAY_LONG_PRESS_MS_ = 200;
-  function wireDayCell_(el, onTap, lazy) {
+  function wireDayCell_(el, onTap, lazy, hoverDelayMs) {
     if (HOVER_CAPABLE_) {
       el.addEventListener('click', onTap);
-      wireTooltipTrigger_(el, 200, lazy);
+      wireTooltipTrigger_(el, hoverDelayMs === undefined ? 200 : hoverDelayMs, lazy);
       return;
     }
     var text = el.getAttribute('data-tooltip') || '';
@@ -2746,6 +2824,37 @@
     });
   }
 
+  // ---------- campo de escolha do app (no lugar do <select> nativo) ----------
+  // Nunca abre o menu nativo do celular/PC: um <input type="hidden" id=...> guarda o valor (quem lia
+  // document.getElementById(id).value continua funcionando, e o evento "change" é disparado nele ao escolher)
+  // e um botão com o visual do app abre openDropdownMenu_. options: [{ value, label }].
+  function appSelectHtml_(id, options, selectedValue) {
+    var sel = options.filter(function (o) { return o.value === selectedValue; })[0] || options[0] || { value: '', label: '' };
+    return '<input type="hidden" id="' + id + '" value="' + escapeHtml(sel.value) + '">' +
+      '<button type="button" class="app-select" data-app-select="' + id + '" data-options="' + escapeHtml(JSON.stringify(options)) + '">' +
+      '<span class="app-select-label">' + escapeHtml(sel.label) + '</span>' +
+      '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 9l6 6 6-6"/></svg></button>';
+  }
+  function setupAppSelects_() {
+    document.addEventListener('click', function (e) {
+      var btn = e.target.closest && e.target.closest('button.app-select');
+      if (!btn) return;
+      var input = document.getElementById(btn.getAttribute('data-app-select'));
+      var options = [];
+      try { options = JSON.parse(btn.getAttribute('data-options')) || []; } catch (err) { options = []; }
+      if (!input || !options.length) return;
+      openDropdownMenu_(btn, options.map(function (o) {
+        return { value: o.value, label: o.label, selected: o.value === input.value };
+      }), function (value) {
+        var chosen = options.filter(function (o) { return o.value === value; })[0];
+        if (!chosen) return;
+        input.value = chosen.value;
+        btn.querySelector('.app-select-label').textContent = chosen.label;
+        input.dispatchEvent(new Event('change', { bubbles: true }));
+      });
+    });
+  }
+
   // ---------- input mascarado de dinheiro (R$ 0,00, preenchendo da direita) ----------
   /**
    * Input de dinheiro SEM centavos ("R$ 1.200"): só dígitos, com ponto de milhar, e o cursor
@@ -3025,7 +3134,7 @@
    *
    * Modo padrão: mostra até 4 linhas de opções (medidas de verdade no DOM, não um número
    * fixo de itens), ordenadas por quem chamou (normalmente por uso recente). O que não
-   * couber fica acessível pela cápsula "Outro...", que abre um <select> nativo em ordem
+   * couber fica acessível pela cápsula "Outro...", que abre um menu do app em ordem
    * alfabética; ao escolher algo lá, uma cápsula temporária é criada pra aquela escolha —
    * sem substituir a cápsula "Outro...", que continua disponível pra escolher outra coisa.
    *
@@ -3118,25 +3227,19 @@
       container.appendChild(outroBtn);
     }
 
-    function openOutroSelect() {
-      var select = document.createElement('select');
-      var sorted = items.slice().sort(function (a, b) { return a.label.localeCompare(b.label, 'pt-BR'); });
-      select.innerHTML = '<option value="">Selecione…</option>' + sorted.map(function (i) {
-        return '<option value="' + i.value + '"' + (i.value === selectedValue ? ' selected' : '') + '>' + escapeHtml(i.label) + '</option>';
-      }).join('');
-      container.appendChild(select);
-      select.focus();
-      if (select.showPicker) { try { select.showPicker(); } catch (e) { /* not supported everywhere */ } }
-      select.onchange = function () {
-        if (select.value) {
-          var chosen = sorted.find(function (i) { return i.value === select.value; });
-          tempExtra = chosen;
-          selectedValue = chosen.value;
-          if (config.onChange) config.onChange(selectedValue);
-        }
+    // "Outro...": menu do app (nunca o <select> nativo) com todas as opções em ordem alfabética.
+    function openOutroSelect(anchorEl) {
+      var sorted = items.slice().sort(function (x, y) { return x.label.localeCompare(y.label, 'pt-BR'); });
+      openDropdownMenu_(anchorEl, sorted.map(function (i) {
+        return { value: i.value, label: i.label, selected: i.value === selectedValue };
+      }), function (value) {
+        var chosen = sorted.find(function (i) { return i.value === value; });
+        if (!chosen) return;
+        tempExtra = chosen;
+        selectedValue = chosen.value;
+        if (config.onChange) config.onChange(selectedValue);
         build();
-      };
-      select.onblur = function () { build(); };
+      });
     }
 
     function build() {
@@ -3160,7 +3263,7 @@
       outroBtn.type = 'button';
       outroBtn.className = 'capsule capsule-outro';
       outroBtn.textContent = 'Outro...';
-      outroBtn.onclick = openOutroSelect;
+      outroBtn.onclick = function () { openOutroSelect(outroBtn); };
       container.appendChild(outroBtn);
       trimToMaxRows(container, outroBtn);
     }
@@ -4476,7 +4579,7 @@
   function accountsSummaryHtml_(accounts) {
     var sm = accountsSummary_(accounts);
     function part(label, value) {
-      return '<span class="accounts-sum-part"><span class="muted">' + label + '</span> <span class="' + (value < 0 ? 'amount-expense' : 'amount-income') + '">' + escapeHtml(fmtMoney(value)) + '</span></span>';
+      return '<span class="accounts-sum-part"><span class="muted">' + label + '</span> <span>' + escapeHtml(fmtMoney(value)) + '</span></span>';
     }
     return '<div class="accounts-sum">' + (sm.hasCards ? part('Dinheiro', sm.cash) + part('Crédito', sm.credit) : '') + part('Total', sm.total) + '</div>';
   }
@@ -4493,67 +4596,100 @@
     } catch (e) { /* sem armazenamento: o app continua, só não lembra o nome */ }
   }
   // Fase da lua calculada aqui mesmo (sem serviço externo): idade da lua desde uma lua nova de referência.
-  // No hemisfério sul (Brasil) a parte iluminada fica do lado oposto ao do hemisfério norte, em que os emojis
-  // são desenhados -- por isso a ordem espelhada na lista.
-  var MOON_EMOJIS_SOUTH_ = ['🌑', '🌘', '🌗', '🌖', '🌕', '🌔', '🌓', '🌒'];
-  function moonPhaseEmoji_(date) {
+  /** Fração do ciclo lunar: 0 = nova, 0,5 = cheia, volta a 1 na próxima nova. */
+  function moonPhaseFraction_(date) {
     var SYNODIC = 29.530588853;
     var NEW_MOON_MS = Date.UTC(2000, 0, 6, 18, 14); // lua nova de 06/01/2000
-    var age = (((date.getTime() - NEW_MOON_MS) / 86400000) % SYNODIC + SYNODIC) % SYNODIC;
-    return MOON_EMOJIS_SOUTH_[Math.floor(age / SYNODIC * 8 + 0.5) % 8];
+    return ((((date.getTime() - NEW_MOON_MS) / 86400000) % SYNODIC + SYNODIC) % SYNODIC) / SYNODIC;
   }
-  // {sky} = ☀️ de dia, fase da lua à noite/madrugada; {nome} = primeiro nome (frase fora do sorteio sem nome).
+  // Ícones monocromáticos (traço único, cor do texto) das mensagens do Início -- no lugar dos emojis.
+  var HOME_MSG_ICONS_ = {
+    sun: '<circle cx="12" cy="12" r="4"/><path d="M12 2.5v2.5M12 19v2.5M2.5 12H5M19 12h2.5M5.3 5.3l1.8 1.8M16.9 16.9l1.8 1.8M5.3 18.7l1.8-1.8M16.9 7.1l1.8-1.8"/>',
+    money: '<circle cx="12" cy="12" r="9"/><path d="M14.6 9.3c-.5-.8-1.4-1.3-2.6-1.3-1.5 0-2.6.8-2.6 2s1 1.7 2.6 2 2.6.8 2.6 2-1.1 2-2.6 2c-1.2 0-2.1-.5-2.6-1.3M12 6.5V8m0 8v1.5"/>',
+    sprout: '<path d="M12 21v-9"/><path d="M12 12C12 8 9 6 5 6c0 4 3 6 7 6z"/><path d="M12 15c0-3 2.5-5 6-5 0 3-2.5 5-6 5z"/>',
+    flame: '<path d="M12 3c1 3 5 5 5 10a5 5 0 0 1-10 0c0-2 1-3 2-4 .3 1.5 1 2 2 2-1-3 0-6 1-8z"/>',
+    target: '<circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="5"/><circle cx="12" cy="12" r="1"/>',
+    tree: '<path d="M12 2c4 2 6.5 7 6.5 11S16 21 12 22c-4-1-6.5-5-6.5-9S8 4 12 2z"/><path d="M12 2v20M9 4.5c-1.3 5-1.3 10 0 15M15 4.5c1.3 5 1.3 10 0 15"/>',
+    bulb: '<path d="M9 18h6M10 21h4"/><path d="M12 3a6 6 0 0 0-3.5 10.9c.6.5 1 1.2 1 2.1h5c0-.9.4-1.6 1-2.1A6 6 0 0 0 12 3z"/>',
+    cacao: '<path d="M12 2.5c3.5 2 5.5 6 5.5 9.5s-2 7.5-5.5 9.5c-3.5-2-5.5-6-5.5-9.5S8.5 4.5 12 2.5z"/><path d="M12 2.5v19M9.5 5c-1 4.5-1 9.5 0 14M14.5 5c1 4.5 1 9.5 0 14"/>',
+    chart: '<path d="M3 17l6-6 4 4 8-8"/><path d="M15 7h6v6"/>',
+    sparkles: '<path d="M12 3l1.8 5.2L19 10l-5.2 1.8L12 17l-1.8-5.2L5 10l5.2-1.8z"/><path d="M19 15l.7 2 2 .7-2 .7-.7 2-.7-2-2-.7 2-.7z"/>',
+    trophy: '<path d="M8 4h8v5a4 4 0 0 1-8 0z"/><path d="M8 6H5v1a3 3 0 0 0 3 3M16 6h3v1a3 3 0 0 1-3 3M12 13v4M8.5 20h7M10 17h4"/>',
+    coin: '<circle cx="12" cy="12" r="9"/><path d="M12 7v10M9.5 9.5h4a1.5 1.5 0 0 1 0 3h-3a1.5 1.5 0 0 0 0 3h4"/>',
+    heart: '<path d="M12 20s-7-4.4-7-10a4 4 0 0 1 7-2.5A4 4 0 0 1 19 10c0 5.6-7 10-7 10z"/>',
+    piggy: '<path d="M5 12a7 6 0 0 1 12-3.5l3-.5-.5 3.5A6 6 0 0 1 18 16v3h-3v-2h-5v2H7v-3a7 6 0 0 1-2-4z"/><path d="M15 11v.01"/>'
+  };
+  /** Lua desenhada com a fase de verdade. Hemisfério sul (Brasil): crescente com a parte iluminada à ESQUERDA, minguante à direita. */
+  function moonPhaseSvgBody_(date) {
+    var p = moonPhaseFraction_(date);
+    var k = Math.cos(2 * Math.PI * p);
+    var rx = (9 * Math.abs(k)).toFixed(2);
+    var body = '<circle cx="12" cy="12" r="9"/>';
+    if (p > 0.03 && p < 0.97) {
+      // Desenhada com a parte iluminada à direita; espelhada quando a lua está crescendo.
+      var lit = '<path class="moon-lit" d="M12 3A9 9 0 0 1 12 21A' + rx + ' 9 0 0 ' + (k > 0 ? 0 : 1) + ' 12 3z"/>';
+      body += p < 0.5 ? '<g transform="translate(24 0) scale(-1 1)">' + lit + '</g>' : lit;
+    }
+    return body;
+  }
+  function homeMsgIconHtml_(icon, date) {
+    if (!icon) return '';
+    var body = icon === 'moon' ? moonPhaseSvgBody_(date || new Date()) : HOME_MSG_ICONS_[icon];
+    if (!body) return '';
+    return '<svg class="home-msg-ico" viewBox="0 0 24 24" aria-hidden="true">' + body + '</svg>';
+  }
+  // {i:sky} = sol de dia, fase da lua à noite/madrugada; {i:nome-do-ícone} = ícone da frase; {nome} = primeiro nome (frase fora do sorteio sem nome).
   var HOME_GREETINGS_ = {
     morning: [
-      '{sky} Bom dia! Que o dia seja generoso com você (e com o saldo).',
-      '{sky} Bom dia, {nome}! Café na mão e o bolso em dia?',
-      '{sky} Manhã! Hoje é dia de gastar só o que vale a pena.',
-      '{sky} Bom dia! Que tal começar espiando como estão as contas?',
-      '{sky} Opa, {nome}! Já acordou com o pé direito (e o saldo também)?',
-      '{sky} Bom dia! Respira fundo: um lançamento de cada vez.'
+      '{i:sky} Bom dia! Que o dia seja generoso com você (e com o saldo).',
+      '{i:sky} Bom dia, {nome}! Café na mão e o bolso em dia?',
+      '{i:sky} Manhã! Hoje é dia de gastar só o que vale a pena.',
+      '{i:sky} Bom dia! Que tal começar espiando como estão as contas?',
+      '{i:sky} Opa, {nome}! Já acordou com o pé direito (e o saldo também)?',
+      '{i:sky} Bom dia! Respira fundo: um lançamento de cada vez.'
     ],
     afternoon: [
-      '{sky} Boa tarde! Metade do dia já foi, e o orçamento?',
-      '{sky} Boa tarde, {nome}! Já anotou o almoço?',
-      '{sky} Tarde tranquila por aqui. Bom te ver de novo!',
-      '{sky} Boa tarde! Aquela comprinha de hoje já tá lançada?'
+      '{i:sky} Boa tarde! Metade do dia já foi, e o orçamento?',
+      '{i:sky} Boa tarde, {nome}! Já anotou o almoço?',
+      '{i:sky} Tarde tranquila por aqui. Bom te ver de novo!',
+      '{i:sky} Boa tarde! Aquela comprinha de hoje já tá lançada?'
     ],
     evening: [
-      '{sky} Boa noite! Hora de fechar o dia com as contas em ordem.',
-      '{sky} Boa noite, {nome}! Missão do dia cumprida?',
-      '{sky} Noite chegando: bom momento pra lançar o que ficou pra trás.',
-      '{sky} Boa noite! Quem anota dorme mais tranquilo.'
+      '{i:sky} Boa noite! Hora de fechar o dia com as contas em ordem.',
+      '{i:sky} Boa noite, {nome}! Missão do dia cumprida?',
+      '{i:sky} Noite chegando: bom momento pra lançar o que ficou pra trás.',
+      '{i:sky} Boa noite! Quem anota dorme mais tranquilo.'
     ],
     night: [
-      '{sky} Madrugada! Parabéns pela disposição, mas o saldo também merece descanso.',
-      '{sky} Acordado a essa hora, {nome}? Parabéns pela dedicação (e lembra de dormir!).',
-      '{sky} Coruja detectada! Parabéns por cuidar do dinheiro até de madrugada.',
-      '{sky} Que horas são essas? Parabéns pelo pique, {nome}!',
-      '{sky} Madrugada produtiva: dinheiro organizado vale mais que sono perdido… só um pouquinho.',
-      '{sky} Parabéns por estar de pé a essa hora! Anota rapidinho e vai descansar.'
+      '{i:sky} Madrugada! Parabéns pela disposição, mas o saldo também merece descanso.',
+      '{i:sky} Acordado a essa hora, {nome}? Parabéns pela dedicação (e lembra de dormir!).',
+      '{i:sky} Coruja detectada! Parabéns por cuidar do dinheiro até de madrugada.',
+      '{i:sky} Que horas são essas? Parabéns pelo pique, {nome}!',
+      '{i:sky} Madrugada produtiva: dinheiro organizado vale mais que sono perdido… só um pouquinho.',
+      '{i:sky} Parabéns por estar de pé a essa hora! Anota rapidinho e vai descansar.'
     ]
   };
   var HOME_ENGAGEMENT_ = [
-    '💰 Cada real guardado hoje é um problema a menos amanhã.',
+    '{i:money} Cada real guardado hoje é um problema a menos amanhã.',
     '{nome}, um lançamento por dia mantém o caos longe.',
-    '🌱 Pequenos gastos evitados viram grandes economias.',
+    '{i:sprout} Pequenos gastos evitados viram grandes economias.',
     'Já olhou seus orçamentos hoje? Eles sentem sua falta.',
-    '🔥 Constância é o segredo: continue aparecendo por aqui!',
+    '{i:flame} Constância é o segredo: continue aparecendo por aqui!',
     'Anotar é o primeiro passo pra economizar. Bora lançar?',
-    '🎯 Qual é a sua meta de economia deste mês? Tá perto?',
-    '{nome}, seu cacau agradece cada dia que você passa por aqui. 🌳',
+    '{i:target} Qual é a sua meta de economia deste mês? Tá perto?',
+    '{i:tree} {nome}, seu cacau agradece cada dia que você passa por aqui.',
     'Gastar com consciência não é só gastar menos, é gastar melhor.',
-    '💡 Dica: confira a aba Planejamento. Dá pra descobrir pra onde o dinheiro vai.',
+    '{i:bulb} Dica: confira a aba Planejamento. Dá pra descobrir pra onde o dinheiro vai.',
     'Hoje você já resistiu a alguma compra por impulso? Aplauso pra você!',
-    '🍫 Quem cuida do dinheiro colhe cacau o ano todo.',
+    '{i:cacao} Quem cuida do dinheiro colhe cacau o ano todo.',
     '{nome}, tem algum gasto de ontem ainda sem lançar?',
     'O melhor momento pra economizar era ontem; o segundo melhor é agora.',
-    '📈 Você está construindo um hábito. Continue!',
+    '{i:chart} Você está construindo um hábito. Continue!',
     'Antes de comprar, pergunta: vale o preço ou só o desejo?',
-    '✨ Saldo organizado, cabeça leve.',
+    '{i:sparkles} Saldo organizado, cabeça leve.',
     '{nome}, que tal dar uma olhada nos reembolsos pendentes?',
     'Cada vez que você volta aqui, o controle fica mais fácil.',
-    '🏆 Economizar é um jogo longo, e você está jogando bem.'
+    '{i:trophy} Economizar é um jogo longo, e você está jogando bem.'
   ];
   function homeGreetingBand_(hour) {
     if (hour < 6) return 'night';
@@ -4561,28 +4697,32 @@
     if (hour < 18) return 'afternoon';
     return 'evening';
   }
-  /** Sorteia uma frase do conjunto; sem nome cadastrado, as com {nome} saem do sorteio. */
+  /** Sorteia uma frase do conjunto; sem nome cadastrado, as com {nome} saem do sorteio.
+   *  O ícone da frase vem do marcador "{i:nome}" no começo ("sky" = sol de dia, fase da lua à noite) e sai do texto. */
   function pickHomeMessage_(pool, name, now, rand, avoid) {
     var usable = pool.filter(function (p) { return name || p.indexOf('{nome}') === -1; });
     if (avoid && usable.length > 1) usable = usable.filter(function (p) { return p !== avoid; });
     var raw = usable[Math.floor((rand || Math.random)() * usable.length)] || '';
     var hour = now.getHours();
-    var sky = hour >= 6 && hour < 18 ? '☀️' : moonPhaseEmoji_(now);
-    return { raw: raw, text: raw.replace(/\{sky\}/g, sky).replace(/\{nome\}/g, name) };
+    var icon = '';
+    var withoutIcon = raw.replace(/^\{i:(\w+)\}\s*/, function (m, n) { icon = n; return ''; });
+    if (icon === 'sky') icon = hour >= 6 && hour < 18 ? 'sun' : 'moon';
+    return { raw: raw, text: withoutIcon.replace(/\{nome\}/g, name), icon: icon, date: now };
   }
-  var homeMsg_ = { greeted: false, raw: '', text: '', animate: false };
+  var homeMsg_ = { greeted: false, raw: '', text: '', icon: '', date: null, animate: false };
   /** Chamada ao ENTRAR na aba Início: a 1ª vez do app aberto é a saudação; as seguintes, engajamento. */
   function homeMessageOnEnter_() {
     var now = new Date();
     var name = userFirstName_();
     var pool = homeMsg_.greeted ? HOME_ENGAGEMENT_ : HOME_GREETINGS_[homeGreetingBand_(now.getHours())];
     var pick = pickHomeMessage_(pool, name, now, null, homeMsg_.raw);
-    homeMsg_ = { greeted: true, raw: pick.raw, text: pick.text, animate: true };
+    homeMsg_ = { greeted: true, raw: pick.raw, text: pick.text, icon: pick.icon, date: pick.date, animate: true };
   }
   /** HTML da mensagem acima do 1º card; o fade-in só toca na entrada (não em re-render da mesma aba). */
   function homeMessageHtml_() {
     if (!homeMsg_.text) return '';
-    var html = '<div class="home-msg' + (homeMsg_.animate ? ' home-msg-in' : '') + '">' + escapeHtml(homeMsg_.text) + '</div>';
+    var ico = homeMsgIconHtml_(homeMsg_.icon, homeMsg_.date);
+    var html = '<div class="home-msg' + (homeMsg_.animate ? ' home-msg-in' : '') + '">' + ico + escapeHtml(homeMsg_.text) + '</div>';
     homeMsg_.animate = false;
     return html;
   }
@@ -4702,9 +4842,9 @@
     }
 
     var accountsHtml = d.accounts.filter(function (a) { return a.type !== 'investment'; }).map(function (a) {
-      var cls = a.balance < 0 ? 'amount-expense' : 'amount-income';
-      return '<div class="row"><span>' + accountNameHtml_(a.name, a.colorIndex) + ' <span class="muted">(' + ACCOUNT_TYPE_LABELS[a.type] + ')</span></span>' +
-        '<span class="' + cls + '">' + fmtMoney(a.balance) + '</span></div>';
+      // Saldo em cor neutra (nunca verde/vermelho: o saldo de conta não é "ganho" nem "perda"); o tipo vira ícone.
+      return '<div class="row"><span>' + accountTypeIconHtml_(a.type) + accountNameHtml_(a.name, a.colorIndex) + '</span>' +
+        '<span>' + fmtMoney(a.balance) + '</span></div>';
     }).join('') || '<div class="empty-state">Nenhuma conta cadastrada.</div>';
 
     var billsHtml = d.creditCardSummaries.map(function (cc) {
@@ -6428,13 +6568,10 @@
           var bills = cc ? cc.bills : [];
           var currentBillMonth = inLeg.billMonth;
           var selectable = bills.filter(function (b) { return b.status === 'fechada' || b.status === 'atrasada' || b.billMonth === currentBillMonth; });
-          field.innerHTML = '<div class="field"><label>Fatura paga por essa transferência</label><select id="e-transfer-bill">' +
-            '<option value="">Não vinculada a nenhuma fatura</option>' +
-            selectable.map(function (b) {
-              return '<option value="' + b.billMonth + '"' + (b.billMonth === currentBillMonth ? ' selected' : '') + '>' +
-                fmtMonthYear(b.billMonth) + ' · ' + fmtMoney(b.remaining) + ' (' + STATUS_LABELS[b.status] + ')</option>';
-            }).join('') +
-            '</select></div>';
+          field.innerHTML = '<div class="field"><label>Fatura paga por essa transferência</label>' + appSelectHtml_('e-transfer-bill',
+            [{ value: '', label: 'Não vinculada a nenhuma fatura' }].concat(selectable.map(function (b) {
+              return { value: b.billMonth, label: fmtMonthYear(b.billMonth) + ' · ' + fmtMoney(b.remaining) + ' (' + STATUS_LABELS[b.status] + ')' };
+            })), currentBillMonth) + '</div>';
         } else {
           field.innerHTML = '';
         }
@@ -13580,10 +13717,10 @@
         var cc = STATE.dashboard && STATE.dashboard.creditCardSummaries.find(function (c) { return c.accountId === toId; });
         var bills = cc ? cc.bills : [];
         var open = bills.filter(function (b) { return b.status === 'fechada' || b.status === 'atrasada'; });
-        field.innerHTML = '<div class="field"><label>Fatura sendo paga</label><select id="p-bill">' +
-          '<option value="">Não vincular a uma fatura específica</option>' +
-          open.map(function (b) { return '<option value="' + b.billMonth + '">' + fmtMonthYear(b.billMonth) + ' · ' + fmtMoney(b.remaining) + ' (' + STATUS_LABELS[b.status] + ')</option>'; }).join('') +
-          '</select></div>';
+        field.innerHTML = '<div class="field"><label>Fatura sendo paga</label>' + appSelectHtml_('p-bill',
+          [{ value: '', label: 'Não vincular a uma fatura específica' }].concat(open.map(function (b) {
+            return { value: b.billMonth, label: fmtMonthYear(b.billMonth) + ' · ' + fmtMoney(b.remaining) + ' (' + STATUS_LABELS[b.status] + ')' };
+          })), '') + '</div>';
       } else {
         field.innerHTML = '';
       }
@@ -14243,7 +14380,12 @@
           });
         }
       });
-      stopOutsideClick_ = dismissOnOutsideClick(root, hold.close, true);
+      // Clicar fora fecha o menu sem disparar o que estiver por baixo -- EXCETO no próprio "+": com o menu já
+      // aberto, o clique nele tem que abrir o Novo lançamento (antes o clique era engolido e nada acontecia).
+      stopOutsideClick_ = dismissOnOutsideClick(root, function (ev) {
+        hold.close();
+        if (!(ev && fab.contains(ev.target))) swallowNextClick_();
+      }, false);
     });
     hold.onClose(function () {
       stack.style.opacity = '0';
@@ -14614,10 +14756,10 @@
         var cc = STATE.dashboard && STATE.dashboard.creditCardSummaries.find(function (c) { return c.accountId === toId; });
         var bills = cc ? cc.bills : [];
         var open = bills.filter(function (b) { return b.status === 'fechada' || b.status === 'atrasada'; });
-        field.innerHTML = '<div class="field"><label>Fatura sendo paga</label><select id="t-bill">' +
-          '<option value="">Não vincular a uma fatura específica</option>' +
-          open.map(function (b) { return '<option value="' + b.billMonth + '">' + fmtMonthYear(b.billMonth) + ' · ' + fmtMoney(b.remaining) + ' (' + STATUS_LABELS[b.status] + ')</option>'; }).join('') +
-          '</select></div>';
+        field.innerHTML = '<div class="field"><label>Fatura sendo paga</label>' + appSelectHtml_('t-bill',
+          [{ value: '', label: 'Não vincular a uma fatura específica' }].concat(open.map(function (b) {
+            return { value: b.billMonth, label: fmtMonthYear(b.billMonth) + ' · ' + fmtMoney(b.remaining) + ' (' + STATUS_LABELS[b.status] + ')' };
+          })), '') + '</div>';
       } else {
         field.innerHTML = '';
       }
@@ -16578,15 +16720,10 @@
     }
 
     html += '<div class="settings-section"><h3>Aparência</h3>' +
-      '<div class="field"><label>Tema</label><select id="st-theme">' +
-        '<option value="">Igual ao sistema</option>' +
-        '<option value="light"' + (theme === 'light' ? ' selected' : '') + '>Claro</option>' +
-        '<option value="dark"' + (theme === 'dark' ? ' selected' : '') + '>Escuro</option>' +
-      '</select></div>' +
-      '<div class="field" style="margin-top:10px"><label>Lado dos botões flutuantes (+)</label><select id="st-nav-side">' +
-        '<option value="right"' + (navSide_() === 'right' ? ' selected' : '') + '>Direita</option>' +
-        '<option value="left"' + (navSide_() === 'left' ? ' selected' : '') + '>Esquerda</option>' +
-      '</select></div></div>';
+      '<div class="field"><label>Tema</label>' + appSelectHtml_('st-theme', [
+        { value: '', label: 'Igual ao sistema' }, { value: 'light', label: 'Claro' }, { value: 'dark', label: 'Escuro' }], theme) + '</div>' +
+      '<div class="field" style="margin-top:10px"><label>Lado dos botões flutuantes (+)</label>' + appSelectHtml_('st-nav-side', [
+        { value: 'right', label: 'Direita' }, { value: 'left', label: 'Esquerda' }], navSide_()) + '</div></div>';
 
     html += '<div class="settings-section"><h3>Preferências</h3>' +
       '<div class="field"><label>Como te chamo? (opcional)</label><input type="text" id="st-user-name" maxlength="30" placeholder="Seu primeiro nome" autocomplete="off" value="' + escapeHtml(userFirstName_()) + '">' +
@@ -16596,13 +16733,11 @@
       '<div class="settings-row"><div class="grow"></div>' +
         '<button class="secondary" id="st-goal-remove"' + (STATE.balanceGoal ? '' : ' disabled') + '>Remover meta</button>' +
         '<button id="st-goal-save">Salvar meta</button></div>' +
-      '<div class="settings-row" style="margin-top:10px"><div class="grow"><div>Lançar sozinho o que já é conhecido</div>' +
-      '<div class="muted">Quando fornecedor, categoria e conta já vêm do seu histórico, o lançamento entra no Extrato com o selo "a confirmar" e continua na fila até você confirmar ou descartar. Desligar não desfaz os que já entraram.</div></div>' +
-      '<label style="display:flex;align-items:center;gap:6px"><input type="checkbox" id="st-auto-entries"' + (STATE.autoEntriesEnabled ? ' checked' : '') + '></label></div>' +
+      '<label class="settings-switch" style="margin-top:10px"><input type="checkbox" id="st-auto-entries" role="switch"' + (STATE.autoEntriesEnabled ? ' checked' : '') + '><div class="grow"><div>Lançar sozinho o que já é conhecido</div>' +
+      '<div class="muted">Quando fornecedor, categoria e conta já vêm do seu histórico, o lançamento entra no Extrato com o selo "a confirmar" e continua na fila até você confirmar ou descartar. Desligar não desfaz os que já entraram.</div></div></label>' +
       (analytics_().enabled() ?
-        '<div class="settings-row" style="margin-top:10px"><div class="grow"><div>Ajudar a melhorar o Meu Cacau</div>' +
-        '<div class="muted">Envia, de forma anônima, quais telas você usa e por quanto tempo. Nunca envia valores, nomes ou descrições dos seus lançamentos.</div></div>' +
-        '<label style="display:flex;align-items:center;gap:6px"><input type="checkbox" id="st-analytics"' + (analytics_().optedOut() ? '' : ' checked') + '></label></div>' : '') +
+        '<label class="settings-switch" style="margin-top:10px"><input type="checkbox" id="st-analytics" role="switch"' + (analytics_().optedOut() ? '' : ' checked') + '><div class="grow"><div>Ajudar a melhorar o Meu Cacau</div>' +
+        '<div class="muted">Envia, de forma anônima, quais telas você usa e por quanto tempo. Nunca envia valores, nomes ou descrições dos seus lançamentos.</div></div></label>' : '') +
       '</div>';
 
     if (inApp) {
@@ -16797,6 +16932,8 @@
     if (more) more.setAttribute('aria-expanded', 'false');
   }
 
+  // Tooltip da barra de abas só aparece depois de 2 s com o mouse parado (pedido de 19/11/2026); no toque longo continua rápido.
+  var TAB_TOOLTIP_DELAY_MS_ = 2000;
   function setupSidebar_() {
     var nav = document.querySelector('nav.tabbar');
     if (!nav) return;
@@ -16814,7 +16951,7 @@
       render();
     }
     document.querySelectorAll('.tab-btn[data-view]').forEach(function (btn) {
-      wireDayCell_(btn, function () { goTo_(btn.dataset.view); }, true);
+      wireDayCell_(btn, function () { goTo_(btn.dataset.view); }, true, TAB_TOOLTIP_DELAY_MS_);
     });
     if (more && panel) {
       wireDayCell_(more, function () {
@@ -16824,7 +16961,7 @@
         panel.style.right = Math.max(8, document.documentElement.clientWidth - more.getBoundingClientRect().right) + 'px';
         panel.classList.toggle('open', open);
         more.setAttribute('aria-expanded', open ? 'true' : 'false');
-      }, true);
+      }, true, TAB_TOOLTIP_DELAY_MS_);
       // Toque fora do painel "Mais" fecha.
       document.addEventListener('mousedown', function (e) {
         if (panel.classList.contains('open') && !panel.contains(e.target) && !more.contains(e.target)) closeTabbarMore_();
@@ -16883,6 +17020,7 @@
     setupMarginSwitchZones_();
     setupScrollToTopButton_();
     setupDateTimePickerAutoOpen_();
+    setupAppSelects_();
     document.getElementById('theme-toggle').onclick = toggleTheme_;
     updateThemeToggleIcon_();
     var settingsBtn = document.getElementById('settings-btn');
