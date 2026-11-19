@@ -689,13 +689,22 @@
   svg.inline-icon { width: 1.1em; height: 1.1em; vertical-align: -0.2em; }
   /* Ícone do tipo de conta (card Contas do Início). */
   svg.acc-type-ico { width: 1.15em; height: 1.15em; vertical-align: -0.2em; margin-right: 6px; fill: none; stroke: var(--text-muted); stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
-  /* Tema (em cima) e configurações (embaixo) empilhados no canto do lado da barra
-     lateral; 8px de borda + 36px de largura = centro a 26px, o mesmo da barra. */
-  .theme-toggle-btn {
+  /* Tema, configurações, sugestões e (no Início) editar cards: coluna no CENTRO da lateral (menos chance de cobrir algo
+     importante no celular, onde o canto superior é área de conteúdo); 8px de borda + 36px de largura = centro a 26px,
+     o mesmo da barra. */
+  #corner-stack {
     position: fixed;
-    top: 12px;
+    top: 50%;
     right: 8px;
+    transform: translateY(-50%);
     z-index: 45;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 8px;
+  }
+  .theme-toggle-btn {
+    flex: none;
     width: 36px;
     height: 36px;
     border-radius: 50%;
@@ -710,11 +719,6 @@
     box-shadow: var(--shadow);
   }
 
-  #settings-btn { top: 56px; }
-  /* Sugestões fica sob as configurações (ou sob o tema, se não houver configurações). */
-  #feedback-btn { top: 56px; }
-  #settings-btn ~ #feedback-btn { top: 100px; }
-  /* Editar cards (só na aba Início) fica sob o de sugestões. */
   /* Tela de carregamento: só a silhueta do cacaueiro (máscara em --boot-mask, no Index.html), enchendo de baixo pra cima
      com o marrom do app. Fica abaixo da tela de entrada do login web (z-index 150). */
   #boot-splash { position: fixed; inset: 0; z-index: 140; background: var(--bg); display: flex; align-items: center; justify-content: center; transition: opacity .35s ease; }
@@ -731,8 +735,9 @@
   /* Ícone monocromático (traço da cor do texto) antes da frase; a parte iluminada da lua é preenchida. */
   svg.home-msg-ico { width: 0.9em; height: 0.9em; vertical-align: -0.1em; margin-right: 8px; fill: none; stroke: currentColor; stroke-width: 1.7; stroke-linecap: round; stroke-linejoin: round; }
   svg.home-msg-ico .moon-lit { fill: currentColor; }
-  .home-msg-in { animation: home-msg-fade 0.9s ease-out both; }
-  @keyframes home-msg-fade { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
+  /* Entra com atraso (0,6 s): o card/aba aparece primeiro e a mensagem chega depois, com mais destaque. */
+  .home-msg-in { animation: home-msg-fade 1s cubic-bezier(.2,.8,.2,1) 0.6s both; }
+  @keyframes home-msg-fade { from { opacity: 0; transform: translateY(14px) scale(.97); filter: blur(3px); } to { opacity: 1; transform: none; filter: none; } }
   @media (prefers-reduced-motion: reduce) { .home-msg-in { animation: none; } }
   /* Card "Saldo do ciclo": faixa larga (esquerda = o que sobrou, direita = o que já saiu, por nome). */
   .cycle-head { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; flex-wrap: wrap; margin-bottom: 6px; }
@@ -750,10 +755,13 @@
   .cycle-saved-items { display: flex; flex-wrap: wrap; gap: 8px 28px; }
   .cycle-saved-items strong { display: block; font-size: 18px; }
   .cycle-saved-items .muted { font-size: 12px; }
-  #edit-cards-btn { top: 100px; }
-  #settings-btn ~ #edit-cards-btn { top: 144px; }
-  #edit-cards-btn[hidden] { display: none; }
-  html[data-nav-side="left"] .theme-toggle-btn { right: auto; left: 8px; }
+  /* Editar cards só existe no Início: escondido, ele encolhe (altura 0 + some) em vez de sumir de uma vez, então a
+     coluna centralizada se reacomoda com animação. */
+  #edit-cards-btn[hidden] { display: flex; height: 0; margin-top: -8px; border-width: 0; opacity: 0; transform: scale(.5); overflow: hidden; pointer-events: none; }
+  @media (prefers-reduced-motion: no-preference) {
+    #edit-cards-btn { transition: height .25s cubic-bezier(.2,.8,.2,1), margin .25s ease, opacity .2s ease, transform .25s cubic-bezier(.34,1.4,.64,1), border-width .25s ease, scale .12s ease; }
+  }
+  html[data-nav-side="left"] #corner-stack { right: auto; left: 8px; }
   /* Voltar ao topo fica acima da barra, no lado oposto ao dos botões (+ e para confirmar). */
   #scroll-to-top-btn { right: auto; left: 12px; }
   html[data-nav-side="left"] #scroll-to-top-btn { left: auto; right: 12px; }
@@ -1004,6 +1012,37 @@
      no topo da tela pra descontar (a barra de abas fica no rodapé). z-index maior que
      conteúdo normal pra ficar por cima da lista de lançamentos ao "grudar". */
   .tx-calendar-card { position: sticky; top: 0; z-index: 5; }
+  /* Cabeçalho da aba Reembolsos (título, "Mostrar concluídos", pessoa) gruda no topo ao rolar, como o Resumo no Extrato. */
+  .refunds-head-card { position: sticky; top: 0; z-index: 5; }
+  /* Botão "Hoje" no centro do cabeçalho do Resumo: escondido (largura 0) até o gráfico sair da data de hoje; aparece e
+     some com a mesma animação (largura + opacidade + escala), como os demais botões pequenos do app. */
+  .cal-today-btn { flex-shrink: 0; max-width: 0; padding-left: 0; padding-right: 0; margin: 0 -4px; border-width: 0; opacity: 0;
+    transform: scale(.7); overflow: hidden; pointer-events: none; }
+  .cal-today-btn.cal-today-show { max-width: 64px; padding-left: 10px; padding-right: 10px; margin: 0; border-width: 1px; opacity: 1;
+    transform: scale(1); pointer-events: auto; }
+  @media (prefers-reduced-motion: no-preference) {
+    .cal-today-btn { transition: max-width .26s cubic-bezier(.2,.8,.2,1), padding .26s cubic-bezier(.2,.8,.2,1), margin .26s ease,
+      opacity .2s ease, transform .26s cubic-bezier(.34,1.4,.64,1), border-width .26s ease, scale .12s ease; }
+  }
+  /* Aba Fornecedores: filtros no topo (gruda ao rolar), lista com barrinha proporcional ao total e modal com gráfico de 12 meses. */
+  .sup-head-card { position: sticky; top: 0; z-index: 5; }
+  .sup-caps { margin-bottom: 8px; }
+  .sup-bar { display: block; height: 4px; border-radius: 2px; background: var(--border); margin-top: 6px; overflow: hidden; }
+  .sup-bar > span { display: block; height: 100%; border-radius: 2px; background: var(--primary); transform-origin: left; }
+  .sup-stats { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+  .sup-stats > div { display: flex; flex-direction: column; gap: 2px; padding: 8px 10px; border: 1px solid var(--border); border-radius: 10px; }
+  .sup-stats .muted { font-size: 11px; }
+  .sup-months { display: flex; align-items: flex-end; gap: 4px; height: 84px; margin-bottom: 8px; }
+  .sup-month { flex: 1; min-width: 0; height: 100%; display: flex; flex-direction: column; justify-content: flex-end; align-items: center; gap: 3px; }
+  .sup-month-bar { display: block; width: 100%; border-radius: 3px 3px 0 0; background: var(--primary); transform-origin: bottom; min-height: 2px; }
+  .sup-month-lbl { font-size: 10px; text-transform: uppercase; }
+  @media (prefers-reduced-motion: no-preference) {
+    .sup-row { animation: view-rise .36s cubic-bezier(.2,.8,.2,1) backwards; animation-delay: calc(var(--i, 0) * 28ms); }
+    .sup-bar > span { animation: sup-grow .6s cubic-bezier(.2,.8,.2,1) backwards; animation-delay: calc(var(--i, 0) * 28ms + 120ms); }
+    .sup-month-bar { animation: sup-rise .5s cubic-bezier(.2,.8,.2,1) backwards; animation-delay: calc(var(--i, 0) * 30ms); }
+    @keyframes sup-grow { from { transform: scaleX(0); } }
+    @keyframes sup-rise { from { transform: scaleY(0); } }
+  }
   /* No Início o Resumo é um card comum (não gruda no topo) e o dia não leva a lugar nenhum. */
   .tx-calendar-card.tx-calendar-home { position: static; }
   .tx-calendar-home .day-bar-clickable { cursor: default; }
@@ -1830,20 +1869,25 @@
     </div>
   </div>
 
+  <div id="corner-stack">
   <button class="theme-toggle-btn" id="theme-toggle" title="Alternar tema claro/escuro"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8z"/></svg></button>
   
   <button class="theme-toggle-btn" id="settings-btn" title="Configurações"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg></button>
+  
+  <button class="theme-toggle-btn" id="feedback-btn" title="Sugestões e dúvidas" aria-label="Sugestões e dúvidas"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg></button>
+  <button class="theme-toggle-btn" id="edit-cards-btn" hidden title="Editar cards" aria-label="Editar cards"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg></button>
+  </div>
+  
   <div class="setup-banner" id="setup-banner" hidden>
     <span>Falta configurar a captura de notificações.</span>
     <button id="setup-banner-btn">Configurar</button>
   </div>
   
-  <button class="theme-toggle-btn" id="feedback-btn" title="Sugestões e dúvidas" aria-label="Sugestões e dúvidas"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg></button>
-  <button class="theme-toggle-btn" id="edit-cards-btn" hidden title="Editar cards" aria-label="Editar cards"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg></button>
 
   <div class="tabbar-more" id="tabbar-more">
     <button class="tab-btn" data-view="accounts" aria-label="Contas"><svg class="tab-ico" viewBox="0 0 24 24" aria-hidden="true"><rect x="2" y="5" width="20" height="14" rx="2"/><path d="M2 10h20M6 15h4"/></svg><span class="tab-label"><span>Contas</span></span></button>
     <button class="tab-btn" data-view="categories" aria-label="Categorias"><svg class="tab-ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M20.6 13.4l-7.2 7.2a2 2 0 0 1-2.8 0L3 13V3h10l7.6 7.6a2 2 0 0 1 0 2.8z"/><circle cx="7.5" cy="7.5" r="1"/></svg><span class="tab-label"><span>Categorias</span></span></button>
+    <button class="tab-btn" data-view="suppliers" aria-label="Fornecedores"><svg class="tab-ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 9l1.5-5h15L21 9"/><path d="M3 9a3 3 0 0 0 6 0 3 3 0 0 0 6 0 3 3 0 0 0 6 0"/><path d="M5 12.5V20h14v-7.5M10 20v-4.5h4V20"/></svg><span class="tab-label"><span>Fornecedores</span></span></button>
   </div>
   <div class="dock-row">
     <nav class="tabbar">
@@ -2192,8 +2236,9 @@
       })(el, text, value);
     }
   }
+  var swipeRendering_ = false; // true só no render() chamado por completeSwipeIncoming_ (troca de aba por deslize)
   function motionAfterRender_(sameView) {
-    if (!motionOk_) return;
+    if (!motionOk_ || swipeRendering_) return;
     var root = document.getElementById('view-root');
     if (!root) return;
     if (!sameView) {
@@ -4539,6 +4584,7 @@
     else if (STATE.currentView === 'transactions') renderTransactions();
     else if (STATE.currentView === 'accounts') renderAccounts();
     else if (STATE.currentView === 'categories') renderCategories();
+    else if (STATE.currentView === 'suppliers') renderSuppliers();
     else if (STATE.currentView === 'budgets') renderBudgets();
     else if (STATE.currentView === 'refunds') renderRefunds();
 
@@ -5136,7 +5182,7 @@
   function setupReviewButton_() {
     var btn = document.getElementById('review-pending');
     if (!btn) return;
-    var hold = setupHoldToReveal_(btn, { hoverDelayMs: SIDEBAR_HOLD_MS_, touchDelayMs: SIDEBAR_HOLD_MS_, leaveGraceMs: 150 });
+    var hold = setupHoldToReveal_(btn, { hoverDelayMs: SIDEBAR_HOLD_MS_, touchDelayMs: HOLD_REVEAL_TOUCH_MS, leaveGraceMs: 150 });
     var stopOutsideClick_ = null;
     hold.onOpen(function () {
       // Largura natural: 11px de borda + ícone (22) + vão (10) + nome + 11px de borda.
@@ -5905,14 +5951,15 @@
       (filterId ? ' de ' + escapeHtml(filterLabel) : '') + (hiddenCount ? '.' : ' ainda.') + '</div></div>';
 
     root.innerHTML =
-      '<div class="card">' +
+      '<div class="card refunds-head-card">' +
         '<div style="display:flex;justify-content:space-between;align-items:center;gap:8px">' +
           '<div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;min-width:0">' +
             '<h2 style="margin:0">Reembolsos</h2>' + refundsHeaderTextHtml_(computeRefundDebtors_(liveRefundShares_())) +
           '</div>' +
           '<div style="display:flex;align-items:center;gap:6px;flex-shrink:0">' +
-            '<button type="button" class="capsule' + (hideDone ? ' active' : '') + '" id="refunds-done-btn" aria-pressed="' + (hideDone ? 'true' : 'false') + '">' +
-              (hideDone ? 'Mostrar concluídos' : 'Ocultar concluídos') + '</button>' +
+            // Texto FIXO: ativo = mostra os concluídos, inativo = esconde (o texto não troca ao clicar -- confundia).
+            '<button type="button" class="capsule' + (hideDone ? '' : ' active') + '" id="refunds-done-btn" aria-pressed="' + (hideDone ? 'false' : 'true') + '">' +
+              'Mostrar concluídos</button>' +
             '<button type="button" class="capsule" id="refunds-person-btn">' + escapeHtml(filterLabel) + ' ▾</button>' +
           '</div>' +
         '</div>' +
@@ -8089,6 +8136,44 @@
     scrollToTxDay_(date);
   }
 
+  /** scrollLeft que deixa a data de hoje no centro do Resumo (sem hoje no intervalo, o fim). */
+  function calTodayScrollLeft_(container) {
+    var cell = container.querySelector('[data-date="' + todayYmd() + '"]');
+    var max = Math.max(0, container.scrollWidth - container.clientWidth);
+    if (!cell) return max;
+    var cellLeft = cell.getBoundingClientRect().left - container.getBoundingClientRect().left + container.scrollLeft;
+    return Math.min(max, Math.max(0, cellLeft - (container.clientWidth - cell.offsetWidth) / 2));
+  }
+  /** Botão "Hoje" do cabeçalho do Resumo: aparece (com animação, via classe) quando o gráfico saiu da posição de hoje
+   *  e some ao voltar -- inclusive ao ser clicado. */
+  var CAL_TODAY_TOLERANCE_PX_ = 28;
+  function updateCalTodayBtn_() {
+    var wrap = document.getElementById('tx-calendar-weeks-wrap');
+    var btn = document.getElementById('tx-calendar-today');
+    if (!wrap || !btn || wrap.clientWidth === 0) return;
+    var away = Math.abs(wrap.scrollLeft - calTodayScrollLeft_(wrap)) > CAL_TODAY_TOLERANCE_PX_;
+    btn.classList.toggle('cal-today-show', away);
+    btn.tabIndex = away ? 0 : -1;
+    btn.setAttribute('aria-hidden', away ? 'false' : 'true');
+  }
+  function setupCalTodayBtn_(wrap) {
+    var btn = document.getElementById('tx-calendar-today');
+    if (!btn || !wrap) return;
+    var raf = 0;
+    wrap.addEventListener('scroll', function () {
+      if (raf) return;
+      raf = requestAnimationFrame(function () { raf = 0; updateCalTodayBtn_(); });
+    }, { passive: true });
+    btn.onclick = function (e) {
+      e.stopPropagation(); // o cabeçalho inteiro abre/fecha o card
+      var key = calScrollKey_();
+      STATE[key] = null; // volta ao comportamento "centrado em hoje" (ver positionTxCalendarScroll_)
+      wrap._userScrolled = false;
+      wrap.scrollTo({ left: calTodayScrollLeft_(wrap), behavior: motionOk_ ? 'smooth' : 'auto' });
+      btn.classList.remove('cal-today-show'); // some na hora, sem esperar a rolagem terminar
+    };
+  }
+
   /** Posiciona a rolagem horizontal do Resumo depois de reconstruir o conteúdo.
    *  REGRA: só a rolagem feita À MÃO pelo usuário é guardada (STATE.*CalendarScrollLeft). Sem isso, abre
    *  e re-renderiza SEMPRE centrado na data de hoje (sem hoje no intervalo, no fim). Antes o app guardava
@@ -8102,15 +8187,7 @@
     container.onscroll = null;
     var key = calScrollKey_();
     var tries = 0;
-    function center() {
-      var cell = container.querySelector('[data-date="' + todayYmd() + '"]');
-      if (cell) {
-        var cellLeft = cell.getBoundingClientRect().left - container.getBoundingClientRect().left + container.scrollLeft;
-        container.scrollLeft = Math.max(0, cellLeft - (container.clientWidth - cell.offsetWidth) / 2);
-      } else {
-        container.scrollLeft = container.scrollWidth;
-      }
-    }
+    function center() { container.scrollLeft = calTodayScrollLeft_(container); }
     function place() {
       if (!container.isConnected) return;
       if (container.clientWidth === 0 && tries < 20) { tries++; requestAnimationFrame(place); return; }
@@ -8127,10 +8204,12 @@
       });
     }
     place();
+    requestAnimationFrame(function () { requestAnimationFrame(updateCalTodayBtn_); });
     if (STATE[key] === null) {
       [120, 500].forEach(function (ms) {
         setTimeout(function () {
           if (container.isConnected && STATE[key] === null && !container._userScrolled && container.clientWidth > 0) center();
+          updateCalTodayBtn_();
         }, ms);
       });
     }
@@ -8155,6 +8234,7 @@
       wrap.addEventListener(ev, function () { wrap._userScrolled = true; }, { passive: true });
     });
     setupCalendarDragScroll_(wrap);
+    setupCalTodayBtn_(wrap);
     renderTxCalendar_();
   }
 
@@ -8186,6 +8266,7 @@
           '<h2 style="margin:0;flex-shrink:0">Resumo</h2>' +
           '<div id="tx-calendar-filtered-stats" style="overflow:hidden;white-space:nowrap;text-overflow:ellipsis;min-width:0;font-size:12px;color:var(--text-muted)"></div>' +
         '</div>' +
+        '<button type="button" id="tx-calendar-today" class="capsule cal-today-btn" tabindex="-1" aria-hidden="true">Hoje</button>' +
         '<div id="tx-calendar-mode" class="capsule-field"></div>' +
         '<span id="tx-calendar-chevron" style="display:inline-block;color:var(--text-muted);transition:transform 200ms ease;flex-shrink:0;' +
           'transform:rotate(' + (expanded ? '180deg' : '0deg') + ')">▾</span>' +
@@ -8671,6 +8752,265 @@
       });
     });
     document.getElementById('add-category').onclick = function () { openCategoryModal(); };
+  }
+
+  // ---------- aba Fornecedores (os "Pago a" / "Recebido de" dos lançamentos) ----------
+  // Agrupa os lançamentos pelo nome do estabelecimento (sem diferenciar maiúsculas/acentos/espaços) e mostra o total, a
+  // quantidade, a média, a 1ª/última data, as categorias e a evolução mês a mês, com filtros de tipo, período, categoria e busca.
+  var SUPPLIER_PERIODS_ = [
+    { value: 'all', label: 'Tudo', days: 0 },
+    { value: '365', label: '12 meses', days: 365 },
+    { value: '90', label: '90 dias', days: 90 },
+    { value: '30', label: '30 dias', days: 30 }
+  ];
+  var SUPPLIER_SORTS_ = [
+    { value: 'total', label: 'Maior valor' },
+    { value: 'count', label: 'Mais lançamentos' },
+    { value: 'avg', label: 'Maior média' },
+    { value: 'recent', label: 'Mais recente' },
+    { value: 'name', label: 'A–Z' }
+  ];
+  var supplierUi_ = { kind: 'expense', period: 'all', sort: 'total', text: '', categoryId: '' };
+  /** Chave de agrupamento: minúsculas, sem acento e com espaços normalizados ("Padaria  São João" = "padaria sao joao"). */
+  function supplierKey_(name) {
+    return String(name || '').trim().replace(/\s+/g, ' ').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase();
+  }
+  /** Estatísticas por fornecedor. `list` já vem filtrada (tipo/período/categoria); `amountOf(t)` dá o valor líquido do lançamento.
+   *  Sem "Pago a" preenchido o lançamento não entra (vira `withoutName`). Pura (só dados) -- testável. */
+  function supplierStats_(list, amountOf) {
+    var map = {}, out = [], withoutName = { count: 0, total: 0 };
+    list.forEach(function (t) {
+      var key = supplierKey_(t.counterparty);
+      var amount = amountOf(t);
+      if (!key) { withoutName.count++; withoutName.total += amount; return; }
+      var s = map[key];
+      if (!s) {
+        s = map[key] = { key: key, names: {}, total: 0, count: 0, first: t.date, last: t.date, byCategory: {}, byMonth: {}, txs: [] };
+        out.push(s);
+      }
+      var nm = String(t.counterparty).trim().replace(/\s+/g, ' ');
+      s.names[nm] = (s.names[nm] || 0) + 1;
+      s.total += amount; s.count++;
+      if (t.date < s.first) s.first = t.date;
+      if (t.date > s.last) s.last = t.date;
+      var cat = t.categoryId || '';
+      s.byCategory[cat] = (s.byCategory[cat] || 0) + amount;
+      var ym = String(t.date).slice(0, 7);
+      s.byMonth[ym] = (s.byMonth[ym] || 0) + amount;
+      s.txs.push(t);
+    });
+    out.forEach(function (s) {
+      var best = '', bestN = 0;
+      Object.keys(s.names).forEach(function (n) { if (s.names[n] > bestN || (s.names[n] === bestN && n < best)) { best = n; bestN = s.names[n]; } });
+      s.name = best; // grafia mais usada
+      s.avg = s.count ? s.total / s.count : 0;
+      s.txs.sort(function (a, b) { return a.date !== b.date ? (a.date < b.date ? 1 : -1) : (b.time || '').localeCompare(a.time || ''); });
+    });
+    return { suppliers: out, withoutName: withoutName };
+  }
+  function supplierSort_(list, sort) {
+    var cmp = {
+      total: function (a, b) { return b.total - a.total; },
+      count: function (a, b) { return b.count - a.count || b.total - a.total; },
+      avg: function (a, b) { return b.avg - a.avg; },
+      recent: function (a, b) { return a.last < b.last ? 1 : a.last > b.last ? -1 : b.total - a.total; },
+      name: function (a, b) { return a.name.localeCompare(b.name, 'pt-BR'); }
+    }[sort] || function () { return 0; };
+    return list.slice().sort(cmp);
+  }
+  /** Lançamentos que entram na aba: o tipo escolhido (despesa = "Pago a", receita = "Recebido de"), dentro do período. */
+  function supplierBaseTransactions_() {
+    var p = SUPPLIER_PERIODS_.filter(function (x) { return x.value === supplierUi_.period; })[0] || SUPPLIER_PERIODS_[0];
+    var from = p.days ? addDaysYmd_(todayYmd(), -p.days) : '';
+    return STATE.allTransactions.filter(function (t) {
+      return t.kind === supplierUi_.kind && (!from || t.date >= from);
+    });
+  }
+  function supplierAmountOf_(t) {
+    return t.kind === 'income' ? netContributionOfActive_(t) : netAmountOfPassive_(t);
+  }
+
+  function renderSuppliers() {
+    var root = document.getElementById('view-root');
+    var ui = supplierUi_;
+    function capsules(id, items, current) {
+      return '<div class="capsule-field sup-caps" id="' + id + '">' + items.map(function (it) {
+        return '<button type="button" class="capsule' + (it.value === current ? ' active' : '') + '" data-v="' + escapeHtml(it.value) + '">' + escapeHtml(it.label) + '</button>';
+      }).join('') + '</div>';
+    }
+    root.innerHTML =
+      '<div class="card sup-head-card">' +
+        '<div style="display:flex;justify-content:space-between;align-items:baseline;gap:8px;flex-wrap:wrap">' +
+          '<h2 style="margin:0">Fornecedores</h2><div id="sup-summary" class="muted" style="font-size:12px"></div>' +
+        '</div>' +
+        '<div style="padding-top:12px">' +
+          '<label>Tipo</label>' + capsules('sup-kind', [{ value: 'expense', label: 'Pago a' }, { value: 'income', label: 'Recebido de' }], ui.kind) +
+          '<label>Período</label>' + capsules('sup-period', SUPPLIER_PERIODS_, ui.period) +
+          '<div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:12px">' +
+            '<button type="button" class="capsule" id="sup-cat-btn"></button>' +
+            '<button type="button" class="capsule" id="sup-sort-btn"></button>' +
+          '</div>' +
+          '<div style="position:relative">' +
+            '<input type="text" id="sup-text" style="padding-right:32px;margin-bottom:0" value="' + escapeHtml(ui.text) + '" placeholder="Buscar fornecedor...">' +
+            '<button type="button" id="sup-text-clear" title="Limpar busca" ' +
+              'style="position:absolute;right:4px;top:0;bottom:0;margin:auto 0;width:24px;height:24px;padding:0;background:none;border:none;' +
+              'color:var(--text-muted);font-size:18px;line-height:1;cursor:pointer;align-items:center;justify-content:center;display:' + (ui.text ? 'flex' : 'none') + '">×</button>' +
+          '</div>' +
+        '</div>' +
+      '</div>' +
+      '<div id="sup-list"></div>';
+
+    function bindCaps(id, key) {
+      document.querySelectorAll('#' + id + ' .capsule').forEach(function (b) {
+        b.onclick = function () {
+          ui[key] = b.dataset.v;
+          if (key === 'kind') ui.categoryId = ''; // as categorias de despesa e de receita são outras
+          document.querySelectorAll('#' + id + ' .capsule').forEach(function (x) { x.classList.toggle('active', x === b); });
+          refresh();
+        };
+      });
+    }
+    bindCaps('sup-kind', 'kind');
+    bindCaps('sup-period', 'period');
+    document.getElementById('sup-sort-btn').onclick = function () {
+      var btn = this;
+      openDropdownMenu_(btn, SUPPLIER_SORTS_.map(function (o) { return { value: o.value, label: o.label, selected: o.value === ui.sort }; }), function (v) {
+        ui.sort = v; refresh();
+      });
+    };
+    document.getElementById('sup-cat-btn').onclick = function () {
+      var btn = this;
+      var ids = {};
+      supplierBaseTransactions_().forEach(function (t) { if (supplierKey_(t.counterparty)) ids[t.categoryId || ''] = true; });
+      var opts = [{ value: '', label: 'Todas as categorias', selected: !ui.categoryId }].concat(Object.keys(ids).map(function (id) {
+        var c = STATE.categories.find(function (x) { return x.id === id; });
+        return { value: id || '_none', label: c ? c.name : 'Sem categoria', selected: (id || '_none') === ui.categoryId };
+      }).sort(function (a, b) { return a.label.localeCompare(b.label, 'pt-BR'); }));
+      openDropdownMenu_(btn, opts, function (v) { ui.categoryId = v; refresh(); });
+    };
+    var input = document.getElementById('sup-text');
+    input.addEventListener('input', function () {
+      ui.text = input.value;
+      document.getElementById('sup-text-clear').style.display = input.value ? 'flex' : 'none';
+      refresh();
+    });
+    document.getElementById('sup-text-clear').onclick = function () {
+      input.value = ''; ui.text = ''; this.style.display = 'none'; input.focus(); refresh();
+    };
+    refresh();
+
+    function refresh() {
+      var cat = STATE.categories.find(function (x) { return x.id === ui.categoryId; });
+      var sortLabel = (SUPPLIER_SORTS_.filter(function (o) { return o.value === ui.sort; })[0] || {}).label;
+      document.getElementById('sup-sort-btn').textContent = 'Ordenar: ' + sortLabel + ' ▾';
+      var catBtn = document.getElementById('sup-cat-btn');
+      catBtn.textContent = (ui.categoryId === '_none' ? 'Sem categoria' : cat ? cat.name : 'Todas as categorias') + ' ▾';
+      catBtn.classList.toggle('active', !!ui.categoryId);
+      renderSupplierList_();
+    }
+  }
+
+  function renderSupplierList_() {
+    var host = document.getElementById('sup-list');
+    if (!host) return;
+    var ui = supplierUi_;
+    var list = supplierBaseTransactions_().filter(function (t) {
+      return !ui.categoryId || (t.categoryId || '_none') === ui.categoryId;
+    });
+    var stats = supplierStats_(list, supplierAmountOf_);
+    var q = supplierKey_(ui.text);
+    var shown = supplierSort_(stats.suppliers.filter(function (s) { return !q || s.key.indexOf(q) !== -1; }), ui.sort);
+    var total = shown.reduce(function (sum, s) { return sum + s.total; }, 0);
+    var summary = document.getElementById('sup-summary');
+    if (summary) summary.textContent = shown.length + (shown.length === 1 ? ' fornecedor' : ' fornecedores') + ' · ' + fmtMoney(total);
+
+    var cls = ui.kind === 'income' ? 'amount-income' : 'amount-expense';
+    var max = shown.reduce(function (m, s) { return Math.max(m, Math.abs(s.total)); }, 0) || 1;
+    var rows = shown.map(function (s, i) {
+      var pct = Math.max(2, Math.round(Math.abs(s.total) / max * 100));
+      return '<div class="row row-clickable sup-row" data-sup="' + escapeHtml(s.key) + '" style="--i:' + Math.min(i, 12) + '">' +
+        '<span style="flex:1;min-width:0"><strong>' + escapeHtml(s.name) + '</strong>' +
+          '<br><span class="muted" style="font-size:12px">' + s.count + (s.count === 1 ? ' lançamento' : ' lançamentos') +
+          ' · média ' + escapeHtml(fmtMoney(s.avg)) + ' · última ' + escapeHtml(fmtDate(s.last)) + '</span>' +
+          '<span class="sup-bar"><span style="width:' + pct + '%"></span></span></span>' +
+        '<span class="' + cls + '" style="white-space:nowrap;margin-left:8px">' + escapeHtml(fmtMoney(s.total)) + '</span>' +
+      '</div>';
+    }).join('');
+    var label = ui.kind === 'income' ? 'Recebido de' : 'Pago a';
+    var noName = stats.withoutName.count
+      ? '<div class="muted" style="font-size:12px;padding:8px 2px 0">' + stats.withoutName.count + (stats.withoutName.count === 1 ? ' lançamento' : ' lançamentos') +
+        ' sem "' + label + '" (' + escapeHtml(fmtMoney(stats.withoutName.total)) + ') não aparecem aqui.</div>'
+      : '';
+    host.innerHTML = '<div class="card">' + (rows || '<div class="empty-state">' +
+      (ui.text || ui.categoryId ? 'Nenhum fornecedor com esses filtros.' : 'Nenhum fornecedor ainda — preencha o campo "' + label + '" nos lançamentos.') + '</div>') + noName + '</div>';
+    host.querySelectorAll('[data-sup]').forEach(function (el) {
+      el.onclick = function () {
+        var s = shown.filter(function (x) { return x.key === el.dataset.sup; })[0];
+        if (s) openSupplierModal_(s);
+      };
+    });
+  }
+
+  function openSupplierModal_(s) {
+    var isIncome = supplierUi_.kind === 'income';
+    var cls = isIncome ? 'amount-income' : 'amount-expense';
+    var cats = Object.keys(s.byCategory).map(function (id) { return { id: id, amount: s.byCategory[id] }; })
+      .sort(function (a, b) { return b.amount - a.amount; }).slice(0, 5);
+    var totalAbs = Math.abs(s.total) || 1;
+    var catsHtml = cats.map(function (c) {
+      return '<div class="row"><span>' + categoryLabelHtml(c.id || null) + '</span><span class="muted">' + Math.round(Math.abs(c.amount) / totalAbs * 100) + '% · ' + escapeHtml(fmtMoney(c.amount)) + '</span></div>';
+    }).join('');
+    // últimos 12 meses (até o mês atual, ou o do último lançamento do fornecedor se for futuro)
+    var endYm = todayYmd().slice(0, 7);
+    if (s.last.slice(0, 7) > endYm) endYm = s.last.slice(0, 7);
+    var endIdx = monthIndexOfYm_(endYm), months = [], peak = 0;
+    for (var k = 11; k >= 0; k--) {
+      var ym = ymOfMonthIndex_(endIdx - k), v = s.byMonth[ym] || 0;
+      months.push({ ym: ym, v: v });
+      peak = Math.max(peak, Math.abs(v));
+    }
+    var barsHtml = '<div class="sup-months">' + months.map(function (m, i) {
+      var h = peak ? Math.round(Math.abs(m.v) / peak * 100) : 0;
+      return '<div class="sup-month" data-tooltip="' + escapeHtml(fmtMonthYear(m.ym) + ': ' + fmtMoney(m.v)) + '" style="--i:' + i + '">' +
+        '<span class="sup-month-bar" style="height:' + (m.v ? Math.max(6, h) : 2) + '%"></span>' +
+        '<span class="muted sup-month-lbl">' + fmtMonthFullNoYear_(m.ym).slice(0, 1) + '</span></div>';
+    }).join('') + '</div>';
+    var shownTxs = s.txs.slice(0, 30);
+    openModal(
+      '<h2 style="margin-bottom:2px">' + escapeHtml(s.name) + '</h2>' +
+      '<div class="muted" style="margin-bottom:12px;font-size:12px">' + (isIncome ? 'Recebido de' : 'Pago a') + ' · desde ' + escapeHtml(fmtDate(s.first)) + '</div>' +
+      '<div class="sup-stats">' +
+        '<div><span class="muted">Total</span><strong class="' + cls + '">' + escapeHtml(fmtMoney(s.total)) + '</strong></div>' +
+        '<div><span class="muted">Lançamentos</span><strong>' + s.count + '</strong></div>' +
+        '<div><span class="muted">Média</span><strong>' + escapeHtml(fmtMoney(s.avg)) + '</strong></div>' +
+        '<div><span class="muted">Última vez</span><strong>' + escapeHtml(fmtDate(s.last)) + '</strong></div>' +
+      '</div>' +
+      '<label style="margin-top:14px">Últimos 12 meses</label>' + barsHtml +
+      '<label>Categorias</label><div>' + catsHtml + '</div>' +
+      '<label style="margin-top:12px">Lançamentos' + (s.txs.length > shownTxs.length ? ' (30 mais recentes de ' + s.txs.length + ')' : '') + '</label>' +
+      '<div id="sup-modal-txs">' + shownTxs.map(extratoRowHtml).join('') + '</div>' +
+      '<div style="display:flex;gap:8px;margin-top:14px">' +
+        '<button class="secondary" id="sup-close" style="flex:1">Fechar</button>' +
+        '<button id="sup-open-extrato" style="flex:1">Ver no Extrato</button>' +
+      '</div>'
+    );
+    var modal = document.getElementById('modal-root');
+    document.getElementById('sup-close').onclick = closeModal;
+    document.getElementById('sup-open-extrato').onclick = function () {
+      closeModal();
+      STATE.txFilters = { text: s.name };
+      STATE.txVisibleCount = TX_PAGE_SIZE;
+      STATE.txCalendarScrollLeft = null;
+      STATE.currentView = 'transactions';
+      render();
+    };
+    modal.querySelectorAll('.amount-expense[data-tooltip], .amount-income[data-tooltip], .tx-flag-icon[data-tooltip], .sup-month[data-tooltip]').forEach(function (el) { wireTooltipTrigger_(el); });
+    modal.querySelectorAll('#sup-modal-txs [data-tx]').forEach(function (el) {
+      el.onclick = function () {
+        var t = STATE.allTransactions.find(function (x) { return x.id === el.dataset.tx; });
+        if (t) openTransactionDetailModal(t);
+      };
+    });
   }
 
   function openCategoryModal(existing) {
@@ -14336,8 +14676,8 @@
 
   // ---------- motor genérico de "segure 0.5s pra revelar um mini-menu" ----------
   var HOLD_REVEAL_DELAY_MS = 500;
-  // Toque longo no celular (barra de orçamento, pinos): 200 ms (pedido do usuário -- na prática o antigo 500 ms
-  // parecia quase 1 s). O "+" fica de fora (ver setupHoldToReveal_ no botão flutuante).
+  // Toque longo no celular (barra de orçamento, pinos, "+", botão de revisar, dias do Resumo): 200 ms em todos
+  // (unificado: o "+" tinha 500 ms e parecia bem mais longo que o gráfico do Resumo).
   var HOLD_REVEAL_TOUCH_MS = 200;
   var HOLD_REVEAL_LEAVE_GRACE_MS = 150;
   var HOLD_REVEAL_MOVE_TOLERANCE_PX = 10;
@@ -14374,9 +14714,8 @@
    */
   function setupHoldToReveal_(anchorEl, options) {
     options = options || {};
-    // Toque longo = 200 ms por padrão (HOLD_REVEAL_TOUCH_MS). O "+" passa touchDelayMs maior de
-    // propósito: um toque normal nele (que deve abrir o Novo lançamento) não pode virar toque longo
-    // e abrir o menu no lugar da ação.
+    // Toque longo = HOLD_REVEAL_TOUCH_MS (200 ms) em TODOS os elementos, inclusive o "+" (unificado a pedido do
+    // usuário: o 500 ms antigo do "+" parecia bem mais longo que o do gráfico do Resumo).
     var hoverDelay = options.hoverDelayMs || HOLD_REVEAL_DELAY_MS;
     var touchDelay = options.touchDelayMs || HOLD_REVEAL_TOUCH_MS;
     var leaveGrace = options.leaveGraceMs || HOLD_REVEAL_LEAVE_GRACE_MS;
@@ -14513,7 +14852,7 @@
     // Menu do "+" abre e fecha bem mais rápido que o padrão (as barras de orçamento
     // seguem em 500ms): é um menu que o usuário abre de propósito e várias vezes ao dia,
     // não uma informação extra que aparece se ele parar por cima sem querer.
-    var hold = setupHoldToReveal_(fab, { hoverDelayMs: 200, touchDelayMs: HOLD_REVEAL_DELAY_MS, leaveGraceMs: 100 });
+    var hold = setupHoldToReveal_(fab, { hoverDelayMs: 200, touchDelayMs: HOLD_REVEAL_TOUCH_MS, leaveGraceMs: 100 });
     fabHold_ = hold;
 
     var root = document.createElement('div');
@@ -15147,7 +15486,7 @@
    * sem precisar re-renderizar o que já estava certo).
    */
   // Mesma ordem da barra: Início, Extrato, Planejamento, Reembolsos e, no painel "Mais", Contas e Categorias.
-  var SWIPE_TAB_ORDER_ = ['dashboard', 'transactions', 'budgets', 'refunds', 'accounts', 'categories'];
+  var SWIPE_TAB_ORDER_ = ['dashboard', 'transactions', 'budgets', 'refunds', 'accounts', 'categories', 'suppliers'];
   var SWIPE_DECIDE_THRESHOLD_PX_ = 6; // até aqui, ainda não decidiu se é gesto horizontal ou só rolagem vertical
   var SWIPE_COMMIT_FRACTION_ = 0.35; // arrastar mais que isso da largura do painel já troca de aba ao soltar
   // Um "empurrão" rápido também troca de aba, mesmo curto: velocidade (px/ms) e distância mínima.
@@ -15550,7 +15889,18 @@
     if (!s.incomingPending) return;
     s.incomingPending = false;
     STATE.currentView = s.targetView;
-    render(); // desenha a aba de destino no #view-root novo -- já cuida de scroll/destaque da barra sozinho
+    // Durante a troca por deslize o PRÓPRIO deslize é a animação de entrada: sem a cascata (.view-enter) -- que rodava
+    // dentro do painel e reiniciava quando ele voltava pro lugar, o "piscar" no fim da troca --, sem contagem de valores
+    // e sem a animação dos gráficos (trabalho a mais no quadro em que o dedo solta, o "travar" no celular).
+    var chartAnimBefore = window.Chart && Chart.defaults ? Chart.defaults.animation : undefined;
+    if (window.Chart && Chart.defaults) Chart.defaults.animation = false;
+    swipeRendering_ = true;
+    try {
+      render(); // desenha a aba de destino no #view-root novo -- já cuida de scroll/destaque da barra sozinho
+    } finally {
+      swipeRendering_ = false;
+      if (window.Chart && Chart.defaults) Chart.defaults.animation = chartAnimBefore;
+    }
     // render() leu a rolagem da janela DEPOIS da página já ter encolhido (o #view-root antigo
     // saiu de #app); a posição certa da aba de origem é a de antes do gesto.
     scrollPositions_[s.originalView] = { x: s.scrollX0, y: s.scrollY0 };
@@ -16663,6 +17013,7 @@
     { name: 'Reembolsos', scope: 'vínculos e valores a receber', view: 'refunds' },
     { name: 'Contas', scope: 'contas, saldos e arquivadas', view: 'accounts' },
     { name: 'Categorias', scope: 'categorias, ícones e subcategorias', view: 'categories' },
+    { name: 'Fornecedores', scope: 'totais e filtros por "Pago a"', view: 'suppliers' },
     { name: 'Captura de notificações', scope: 'lançamentos automáticos no Android' },
     { name: 'Barra de abas e botões', scope: 'navegação, + e botões flutuantes' },
     { name: 'Aparência', scope: 'tema, cores e textos' },
@@ -17092,7 +17443,7 @@
   }
 
   /** Marca a aba ativa na barra (a ativa mostra o nome; as outras só o ícone, com o nome no
-   *  tooltip). Contas e Categorias moram no "Mais": quando uma delas está ativa, o botão
+   *  tooltip). Contas, Categorias e Fornecedores moram no "Mais": quando uma delas está ativa, o botão
    *  "Mais" assume o ícone e o nome dela. */
   function syncTabbar_(view) {
     document.querySelectorAll('.tab-btn[data-view]').forEach(function (btn) {
