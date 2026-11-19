@@ -543,6 +543,104 @@ function amountSignForKind_(kind) {
   return (kind === 'income' || kind === 'transfer_in') ? 1 : -1;
 }
 
+/**
+ * CONSOLIDAÇÃO DE SALDO = PONTO FIXO. Editar o saldo atual de uma conta grava uma linha com BalanceTarget: "nesse dia e
+ * horário o saldo dessa conta era esse". Ela não é editável nem removível (assertNotBalanceAnchor_ / o Extrato nem abre
+ * o lançamento) e o valor dela NÃO é fixo: é sempre a diferença entre o ponto fixo e o saldo que a conta tinha logo antes
+ * (applyBalanceAnchors_, chamada em toda leitura de Transactions). Entrou, saiu ou mudou um lançamento ANTERIOR a ela
+ * (data/horário antes) e a consolidação se ajusta sozinha, tirando a diferença -- o saldo depois dela não se mexe. Só o que
+ * for POSTERIOR muda o saldo. Com várias consolidações cada uma ajusta em cadeia (a seguinte parte do ponto fixo anterior).
+ */
+function isBalanceAnchorRow_(row) {
+  var v = row.BalanceTarget;
+  return v !== '' && v !== null && v !== undefined && !isNaN(Number(v));
+}
+
+/** Ordem cronológica de dois lançamentos da planilha: data, horário ("sem horário" vem antes dos horários do dia, igual ao
+ *  Extrato, que lista o sem-horário abaixo) e, no empate, quem foi criado primeiro. */
+function balanceRowOrder_(a, b) {
+  if (a.Date !== b.Date) return a.Date < b.Date ? -1 : 1;
+  var aTime = a.Time || '', bTime = b.Time || '';
+  if (aTime !== bTime) return aTime < bTime ? -1 : 1;
+  var aCreated = String(a.CreatedAt || ''), bCreated = String(b.CreatedAt || '');
+  if (aCreated !== bCreated) return aCreated < bCreated ? -1 : 1;
+  return 0;
+}
+
+function assertNotBalanceAnchor_(row) {
+  if (isBalanceAnchorRow_(row)) {
+    throw new Error('Consolidação de saldo é um ponto fixo e não pode ser editada nem removida. Para corrigir, edite o saldo da conta de novo.');
+  }
+}
+
+/** Saldo inicial legado (coluna InitialBalance) por conta -- só lido quando existe ponto fixo. */
+function initialBalancesByAccount_() {
+  var map = {};
+  readAll_('Accounts').forEach(function (a) { map[a.ID] = Number(a.InitialBalance || 0); });
+  return map;
+}
+
+/** Aplica os pontos fixos: reescreve Kind/Amount de cada consolidação pra diferença entre o BalanceTarget e o saldo logo antes
+ *  dela (em ordem cronológica, por conta). Trabalha em centavos e muda as linhas no lugar; sem ponto fixo é um no-op barato. */
+function applyBalanceAnchors_(rows, initialBalances) {
+  var legacyUnfrozen = false;
+  rows.forEach(function (r) {
+    if (r.AccountID && !isBalanceAnchorRow_(r) && r.Description === ACCOUNT_CONSOLIDATION_DESCRIPTION) legacyUnfrozen = true;
+  });
+  var initials = initialBalances;
+  if (legacyUnfrozen) {
+    initials = initials || initialBalancesByAccount_();
+    freezeLegacyBalanceAnchors_(rows, initials);
+  }
+  var accountIds = {};
+  rows.forEach(function (r) { if (r.AccountID && isBalanceAnchorRow_(r)) accountIds[r.AccountID] = true; });
+  var ids = Object.keys(accountIds);
+  if (!ids.length) return rows;
+  initials = initials || initialBalancesByAccount_();
+  ids.forEach(function (accountId) {
+    var running = Math.round(Number(initials[accountId] || 0) * 100);
+    rows.filter(function (r) { return r.AccountID === accountId; }).sort(balanceRowOrder_).forEach(function (r) {
+      if (isBalanceAnchorRow_(r)) {
+        var targetCents = Math.round(Number(r.BalanceTarget) * 100);
+        var delta = targetCents - running;
+        r.Kind = delta >= 0 ? 'income' : 'expense';
+        r.Amount = Math.abs(delta) / 100;
+        running = targetCents;
+      } else {
+        running += amountSignForKind_(r.Kind) * Math.round(Number(r.Amount) * 100);
+      }
+    });
+  });
+  return rows;
+}
+
+/**
+ * Consolidações antigas (de antes dos pontos fixos) não têm BalanceTarget: vira ponto fixo o saldo que a conta tem hoje logo
+ * depois delas, com o valor gravado -- ou seja, NENHUM saldo muda agora; só a partir daqui lançamentos anteriores a elas
+ * passam a ser absorvidos. Roda uma vez (depois não sobra linha sem alvo). Se a gravação falhar (ex: planilha somente
+ * leitura) as linhas seguem como lançamentos comuns, só que não editáveis.
+ */
+function freezeLegacyBalanceAnchors_(rows, initials) {
+  var legacy = rows.filter(function (r) { return r.AccountID && !isBalanceAnchorRow_(r) && r.Description === ACCOUNT_CONSOLIDATION_DESCRIPTION; });
+  if (!legacy.length) return;
+  var targets = {};
+  var accountIds = {};
+  legacy.forEach(function (r) { accountIds[r.AccountID] = true; });
+  Object.keys(accountIds).forEach(function (accountId) {
+    var running = Math.round(Number((initials || {})[accountId] || 0) * 100);
+    rows.filter(function (r) { return r.AccountID === accountId; }).sort(balanceRowOrder_).forEach(function (r) {
+      running += amountSignForKind_(r.Kind) * Math.round(Number(r.Amount) * 100);
+      if (r.Description === ACCOUNT_CONSOLIDATION_DESCRIPTION && !isBalanceAnchorRow_(r)) targets[r.ID] = running / 100;
+    });
+  });
+  try {
+    legacy.forEach(function (r) { updateRowById_('Transactions', r.ID, { BalanceTarget: targets[r.ID] }); });
+  } catch (err) {
+    return;
+  }
+  legacy.forEach(function (r) { r.BalanceTarget = targets[r.ID]; });
+}
+
 /** account: objeto de linha da aba Accounts (não o ID) — evita reler a aba pra cada conta. */
 function computeAccountBalance_(account, allTransactions) {
   var txs = allTransactions || readAll_('Transactions');
@@ -611,6 +709,48 @@ function appendBalanceTransaction_(accountId, accountType, closingDay, amountSig
     InstallmentTotal: '',
     TransferGroupID: '',
     ForecastID: ''
+  });
+}
+
+/**
+ * Grava a consolidação de saldo (ponto fixo) que faz o saldo da conta ficar em `targetTotal` agora. Devolve a linha ou null
+ * se o saldo já é esse (nada a explicar). O BalanceTarget guarda o saldo logo DEPOIS da linha: o alvo digitado menos o que já
+ * está lançado pra DEPOIS desse instante (parcelas e lançamentos de datas futuras continuam somando por cima, como sempre
+ * somaram) -- assim o saldo exibido logo depois da edição é exatamente o digitado, igual a antes dos pontos fixos.
+ */
+function appendConsolidation_(account, accountType, closingDay, targetTotal) {
+  var date = todayYmd_();
+  var time = nowHm_();
+  var createdAt = nowIso_();
+  var accountRows = readAll_('Transactions').filter(function (t) { return t.AccountID === account.ID; });
+  var allCents = Math.round(Number(account.InitialBalance || 0) * 100);
+  var afterCents = 0;
+  var key = { Date: date, Time: time, CreatedAt: createdAt };
+  accountRows.forEach(function (t) {
+    var signed = amountSignForKind_(t.Kind) * Math.round(Number(t.Amount) * 100);
+    allCents += signed;
+    if (balanceRowOrder_(t, key) > 0) afterCents += signed;
+  });
+  var targetCents = Math.round(targetTotal * 100);
+  var diffCents = targetCents - allCents;
+  if (diffCents === 0) return null;
+  return appendRow_('Transactions', {
+    Date: date,
+    Time: time,
+    AccountID: account.ID,
+    CategoryID: '',
+    Kind: diffCents > 0 ? 'income' : 'expense',
+    Amount: Math.abs(diffCents) / 100,
+    Description: ACCOUNT_CONSOLIDATION_DESCRIPTION,
+    Counterparty: '',
+    BillMonth: accountType === 'credit_card' ? billMonthForDate_(date, Number(closingDay)) : '',
+    InstallmentGroupID: '',
+    InstallmentSeq: '',
+    InstallmentTotal: '',
+    TransferGroupID: '',
+    ForecastID: '',
+    CreatedAt: createdAt,
+    BalanceTarget: (targetCents - afterCents) / 100
   });
 }
 
@@ -728,17 +868,15 @@ function updateAccount(input) {
   var balanceMustNotBeNegative = resultingType !== 'credit_card';
 
   // Editar saldo é SEMPRE "saldo atual": a diferença vira um lançamento de consolidação
-  // com data e hora (input.currentBalance). InitialBalance não é mais editável por aqui —
+  // com data e hora (input.currentBalance) -- um ponto fixo, ver isBalanceAnchorRow_. InitialBalance não é mais editável por aqui —
   // ele só existe como resíduo de conta antiga; conta nova nasce com 0 e o saldo inicial
   // dela é um lançamento (ver appendBalanceTransaction_).
   var consolidationRow = null;
   if (input.currentBalance !== undefined) {
     var target = Number(input.currentBalance);
     if (balanceMustNotBeNegative && target < 0) throw new Error('Saldo não pode ser negativo nesse tipo de conta.');
-    var computedBalance = computeAccountBalance_(current, readAll_('Transactions'));
-    var diffCents = Math.round(target * 100) - Math.round(computedBalance * 100);
     var closingDayForBill = updates.ClosingDay !== undefined ? updates.ClosingDay : current.ClosingDay;
-    consolidationRow = appendBalanceTransaction_(input.id, resultingType, closingDayForBill, diffCents / 100, ACCOUNT_CONSOLIDATION_DESCRIPTION);
+    consolidationRow = appendConsolidation_(current, resultingType, closingDayForBill, target);
   }
 
   var updated = updateRowById_('Accounts', input.id, updates);
@@ -4091,6 +4229,10 @@ var SCHEMA = {
   // Automático, projeção de saldo, sugestão de valor de recorrente) -- ver
   // shouldExcludeFromAnalysis_/JavaScript.html. Nunca ligada automaticamente sem o
   // usuário confirmar (só uma sugestão), grillado com o usuário.
+  // BalanceTarget (no final, mesmo motivo): só nas linhas "Consolidação de saldo" (ver Accounts.js): o saldo TOTAL da
+  // conta logo DEPOIS dessa linha -- um ponto fixo ("naquele dia e horário o saldo era esse"). O Amount/Kind dessas linhas
+  // é recalculado na leitura (applyBalanceAnchors_) a cada lançamento anterior que entra, sai ou muda; o gravado na
+  // planilha é só o valor do momento em que foi criada. Vazio em todo o resto.
   // ForecastCycleMonth (no final, mesmo motivo): 'YYYY-MM' do ciclo de um Lançamento
   // recorrente MENSAL ao qual esse lançamento está vinculado, quando é DIFERENTE do mês da
   // própria data dele (ex: pagou em setembro o aluguel de agosto). Vazio = o ciclo é o do
@@ -4101,7 +4243,7 @@ var SCHEMA = {
     'ID', 'Date', 'AccountID', 'CategoryID', 'Kind', 'Amount', 'Description',
     'BillMonth', 'InstallmentGroupID', 'InstallmentSeq', 'InstallmentTotal',
     'TransferGroupID', 'CreatedAt', 'Time', 'Counterparty', 'ForecastID', 'ExcludeFromAnalysis',
-    'ForecastCycleMonth'
+    'ForecastCycleMonth', 'BalanceTarget'
   ],
   // MonthlyLimit é, apesar do nome legado, o valor esperado a cada IntervalDays dias
   // (ex: R$100 a cada 7 dias) — não mais um valor fixo mensal. Mantive o nome da coluna
@@ -4455,9 +4597,12 @@ function readAll_(sheetName) {
   var lastRow = sheet.getLastRow();
   if (lastRow < 2) return [];
   var values = sheet.getRange(2, 1, lastRow - 1, headers.length).getValues();
-  return values
+  var rows = values
     .map(function (row) { return normalizeTextColumns_(sheetName, rowToObject_(headers, row)); })
     .filter(function (obj) { return obj.ID; });
+  // Pontos fixos de saldo (consolidações) valem pelo que está ao redor deles: ver applyBalanceAnchors_ (Accounts.js).
+  if (sheetName === 'Transactions' && typeof applyBalanceAnchors_ === 'function') rows = applyBalanceAnchors_(rows);
+  return rows;
 }
 
 /**
@@ -4663,7 +4808,9 @@ function mapTransactionRow_(t) {
     // 'YYYY-MM' (ciclo mensal do recorrente vinculado, quando diferente do mês da data) ou
     // null -- ver SCHEMA.Transactions.
     forecastCycleMonth: t.ForecastCycleMonth || null,
-    excludeFromAnalysis: parseBoolCell_(t.ExcludeFromAnalysis)
+    excludeFromAnalysis: parseBoolCell_(t.ExcludeFromAnalysis),
+    // Consolidação de saldo: ponto fixo, não editável (ver Accounts.js). amount/kind já vêm recalculados.
+    balanceAnchor: isBalanceAnchorRow_(t)
   };
 }
 
@@ -4748,6 +4895,7 @@ function updateTransaction(input) {
   if (!input.id) throw new Error('ID do lançamento é obrigatório.');
   var existing = findById_('Transactions', input.id);
   if (!existing) throw new Error('Lançamento não encontrado.');
+  assertNotBalanceAnchor_(existing);
   if (existing.Kind === 'transfer_in' || existing.Kind === 'transfer_out') {
     throw new Error('Transferências têm campos diferentes (contas de origem/destino, sem categoria) — use updateTransfer.');
   }
@@ -4812,6 +4960,7 @@ function updateTransaction(input) {
 function deleteTransaction(id) {
   var existing = findById_('Transactions', id);
   if (!existing) throw new Error('Lançamento não encontrado.');
+  assertNotBalanceAnchor_(existing);
   if (existing.Kind === 'transfer_in' || existing.Kind === 'transfer_out') {
     return deleteTransfer(existing.TransferGroupID);
   }

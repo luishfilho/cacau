@@ -1728,6 +1728,10 @@
     .balance-walker-arm-b { transform: rotate(14deg); }
   }
 
+  /* Foto da aba de destino durante o deslize de troca de aba: parada, sem nenhuma animação (as entradas já rodaram quando a foto foi tirada). */
+  .swipe-snapshot, .swipe-snapshot * { animation: none !important; transition: none !important; }
+  .swipe-snapshot .home-msg { opacity: 1; }
+  .swipe-skel .card { height: 96px; margin-bottom: 12px; opacity: .55; }
   .confirm-popover {
     position: fixed;
     background: var(--surface);
@@ -1946,7 +1950,7 @@
 
   <script>var FINANCAS_MULTIUSER = true;</script>
   <script src="https://accounts.google.com/gsi/client" async defer></script>
-  <script src="cacau-web.js?v=25d00a31db"></script>
+  <script src="cacau-web.js?v=a098e8a222"></script>
 <script>
   var STATE = {
     accounts: [],
@@ -2313,7 +2317,41 @@
       })(el, text, value);
     }
   }
-  var swipeRendering_ = false; // true só no render() chamado por completeSwipeIncoming_ (troca de aba por deslize)
+  var swipeRendering_ = false; // true só no render() que fecha a troca de aba por deslize (finishSwipeTransition_)
+  /** Foto de cada aba (cópia do DOM já pronto + gráficos viram imagem), tirada em silêncio um tempo depois de cada render.
+   *  A troca por deslize mostra essa foto no painel de entrada NA HORA e só desenha a aba de verdade quando o deslize termina:
+   *  o render da aba de destino (que no celular leva ~meio segundo) saiu do meio do gesto, que era o que "travava" o dedo
+   *  e mostrava só o fundo preto entre as abas. */
+  var viewSnapshots_ = {};
+  var viewSnapshotTimer_ = null;
+  function captureViewSnapshot_() {
+    viewSnapshotTimer_ = null;
+    if (document.getElementById('swipe-overlay')) return;
+    var root = document.getElementById('view-root');
+    if (!root || !root.firstChild) return;
+    var copy = root.cloneNode(true);
+    copy.removeAttribute('id');
+    copy.classList.remove('view-enter');
+    var live = root.querySelectorAll('canvas'), dead = copy.querySelectorAll('canvas');
+    for (var i = 0; i < live.length && i < dead.length; i++) {
+      var img = document.createElement('img');
+      try { img.src = live[i].toDataURL(); } catch (err) { /* canvas sem leitura: fica vazio na foto */ }
+      img.alt = '';
+      img.style.cssText = live[i].style.cssText;
+      if (!img.style.width) img.style.width = live[i].clientWidth + 'px';
+      if (!img.style.height) img.style.height = live[i].clientHeight + 'px';
+      dead[i].parentNode.replaceChild(img, dead[i]);
+    }
+    viewSnapshots_[STATE.currentView] = copy;
+  }
+  /** Reagenda a foto da aba atual: só tira quando a tela ficar quieta (contagens e entradas animadas já terminaram). */
+  function scheduleViewSnapshot_() {
+    if (viewSnapshotTimer_) clearTimeout(viewSnapshotTimer_);
+    viewSnapshotTimer_ = setTimeout(function () {
+      if (window.requestIdleCallback) requestIdleCallback(captureViewSnapshot_, { timeout: 1500 });
+      else captureViewSnapshot_();
+    }, 1500);
+  }
   function motionAfterRender_(sameView) {
     if (!motionOk_ || swipeRendering_) return;
     var root = document.getElementById('view-root');
@@ -4051,6 +4089,32 @@
     return parent ? parent.name : cat.name;
   }
 
+  /** Consolidação de saldo = PONTO FIXO (ver Accounts.js): o Extrato mostra a linha mas não deixa abrir/editar/remover. */
+  function txIsLocked_(t) { return !!t.balanceAnchor || (t.pending && !t.editable); }
+  function txRowAttrs_(t) {
+    if (t.balanceAnchor) return ' class="row" title="Ponto fixo de saldo: não pode ser editado"';
+    return txIsLocked_(t) ? ' class="row"' : ' class="row row-clickable" data-tx="' + escapeHtml(t.id) + '"';
+  }
+  /** A consolidação (ponto fixo) que vem DEPOIS desse data/horário na conta, a mais próxima -- é ela que absorve um lançamento
+   *  anterior (o saldo não muda; o valor dela é que se ajusta). Empate de minuto = o lançamento é posterior (foi criado depois). */
+  function balanceAnchorAfter_(accountId, date, time) {
+    if (!accountId || !date) return null;
+    var key = date + ' ' + (time || '');
+    var best = null, bestKey = '';
+    STATE.allTransactions.concat(STATE.pendingTransactions).forEach(function (a) {
+      if (!a.balanceAnchor || a.accountId !== accountId) return;
+      var k = a.date + ' ' + (a.time || '');
+      if (k > key && (!best || k < bestKey)) { best = a; bestKey = k; }
+    });
+    return best;
+  }
+  /** Mesma conta que o servidor faz (applyBalanceAnchors_): a consolidação tira a diferença do que entrou/saiu antes dela. */
+  function shiftBalanceAnchor_(anchor, signedChange) {
+    var cents = Math.round((anchor.kind === 'income' ? 1 : -1) * anchor.amount * 100) - Math.round(signedChange * 100);
+    anchor.kind = cents >= 0 ? 'income' : 'expense';
+    anchor.amount = Math.abs(cents) / 100;
+  }
+
   /**
    * Aplica na hora, no STATE local, o efeito de um lançamento que acabou de ser
    * enviado ao servidor (mas ainda não confirmado) — saldo da conta, gráfico de
@@ -4063,9 +4127,12 @@
     var tempId = 'tmp-' + Math.random().toString(36).slice(2);
     var sign = (entry.kind === 'income' || entry.kind === 'transfer_in') ? 1 : -1;
 
+    // Lançamento ANTERIOR a uma consolidação de saldo não muda o saldo: quem muda é a consolidação (ponto fixo).
+    var absorbingAnchor = balanceAnchorAfter_(entry.accountId, entry.date, entry.time);
+    if (absorbingAnchor) shiftBalanceAnchor_(absorbingAnchor, sign * entry.amount);
     if (STATE.dashboard) {
       var acc = STATE.dashboard.accounts.find(function (a) { return a.id === entry.accountId; });
-      if (acc) {
+      if (acc && !absorbingAnchor) {
         acc.balance += sign * entry.amount;
         STATE.dashboard.totalBalance += sign * entry.amount;
       }
@@ -4229,7 +4296,8 @@
       id: tempId, date: todayYmd(), time: nowHm(), accountId: accountId, categoryId: null,
       kind: kind, amount: amount, description: description, counterparty: null,
       billMonth: null, installmentSeq: null, installmentTotal: null, transferGroupId: null,
-      forecastId: null, pending: true, editable: false
+      forecastId: null, pending: true, editable: false,
+      balanceAnchor: description === ACCOUNT_CONSOLIDATION_DESCRIPTION_
     });
     return tempId;
   }
@@ -4682,6 +4750,7 @@
     updateScrollToTopVisibility_();
     updateReviewButton_();
     motionAfterRender_(sameView);
+    if (!swipeRendering_) scheduleViewSnapshot_();
   }
 
   // ---------- botão "voltar ao topo" (só no Extrato, por ora) ----------
@@ -5387,8 +5456,9 @@
     var sub = accountNameHtml(t.accountId); // já vem em HTML (nome colorido/negrito) — números do sufixo não precisam escapar
     if (t.installmentSeq) sub += ' · parcela ' + t.installmentSeq + '/' + t.installmentTotal;
     sub += autoBadgeHtml_(t);
+    if (t.balanceAnchor) sub += ' · <span class="muted">ponto fixo de saldo</span>';
     var whenLabel = fmtDate(t.date) + (t.time ? ' ' + t.time : '');
-    var rowAttrs = (t.pending && !t.editable) ? ' class="row"' : ' class="row row-clickable" data-tx="' + escapeHtml(t.id) + '"';
+    var rowAttrs = txRowAttrs_(t);
     return '<div' + rowAttrs + '>' +
       '<span style="font-size:13px">' + mainLabel + '<br><span class="muted">' + whenLabel + ' · ' + sub + '</span></span>' +
       // Marca "Fora das análises" junto do VALOR (no fim do texto ela podia cair sozinha numa
@@ -6238,7 +6308,7 @@
     var mainLabel = '<strong>Transferência</strong>';
     if (t.description) mainLabel += ' · ' + escapeHtml(t.description);
     var sub = accountNameHtml(from.accountId) + ' <span class="tx-arrow" aria-label="para">→</span> ' + accountNameHtml(to.accountId);
-    var rowAttrs = (t.pending && !t.editable) ? ' class="row"' : ' class="row row-clickable" data-tx="' + escapeHtml(t.id) + '"';
+    var rowAttrs = txRowAttrs_(t);
     return '<div' + rowAttrs + '>' +
       '<span style="flex:0 0 38px;font-size:13px">' + (t.time ? escapeHtml(t.time) : '') + '</span>' +
       '<span style="flex:1;font-size:13px">' + mainLabel + '</span>' +
@@ -6259,7 +6329,7 @@
     var sub = accountNameHtml(t.accountId); // já vem em HTML (nome colorido/negrito) — números do sufixo não precisam escapar
     if (t.installmentSeq) sub += ' · parcela ' + t.installmentSeq + '/' + t.installmentTotal;
     sub += autoBadgeHtml_(t);
-    var rowAttrs = (t.pending && !t.editable) ? ' class="row"' : ' class="row row-clickable" data-tx="' + escapeHtml(t.id) + '"';
+    var rowAttrs = txRowAttrs_(t);
     // Horário numa coluna própria (largura fixa, sempre presente mesmo vazio) — assim ele
     // fica centralizado verticalmente na linha toda (via align-items:center do .row) e não
     // desloca quando falta horário ou quando o texto principal quebra em mais de uma linha.
@@ -6919,6 +6989,7 @@
   /** Clique num lançamento do Extrato ou dos Últimos lançamentos: editar campos ou remover.
    *  convertCtx ({ original }) = o formulário está no meio de uma troca de tipo: t é o rascunho. */
   function openTransactionDetailModal(t, convertCtx) {
+    if (t && t.balanceAnchor) return; // ponto fixo de saldo: não abre (ver txIsLocked_)
     var converting = !!convertCtx;
     var original = converting ? convertCtx.original : t;
     var isTransfer = t.kind === 'transfer_out' || t.kind === 'transfer_in';
@@ -16040,29 +16111,32 @@
     }, SWIPE_WHEEL_IDLE_MS_);
   }
 
-  /** Segunda metade do início da troca: desenha a aba de destino no #view-root novo e o põe no
-   *  painel de entrada. Separada pra poder rodar DEPOIS do primeiro quadro do arrasto (touch) --
-   *  idempotente; finishSwipeTransition_ também chama (se soltou antes de rodar). */
+  var SWIPE_SKELETON_HTML_ = '<div class="swipe-skel"><div class="card"></div><div class="card"></div><div class="card"></div><div class="card"></div></div>';
+  /** Destaque da barra de abas e botão-lápis acompanham a aba de destino durante o deslize (era efeito colateral do render()). */
+  function swipePreviewChrome_(view) {
+    syncTabbar_(view);
+    var editCardsBtn = document.getElementById('edit-cards-btn');
+    if (editCardsBtn) editCardsBtn.hidden = view !== 'dashboard';
+  }
+
+  /** Segunda metade do início da troca: põe no painel de entrada a FOTO da aba de destino (ou um esqueleto, se ela ainda não
+   *  foi aberta nesta sessão). Barato de propósito: o render de verdade só roda quando o deslize termina (finishSwipeTransition_),
+   *  e nem roda se o gesto for desfeito. Idempotente; finishSwipeTransition_ também chama (se soltou antes de rodar). */
   function completeSwipeIncoming_(s) {
     if (!s.incomingPending) return;
     s.incomingPending = false;
-    STATE.currentView = s.targetView;
-    // Durante a troca por deslize o PRÓPRIO deslize é a animação de entrada: sem a cascata (.view-enter) -- que rodava
-    // dentro do painel e reiniciava quando ele voltava pro lugar, o "piscar" no fim da troca --, sem contagem de valores
-    // e sem a animação dos gráficos (trabalho a mais no quadro em que o dedo solta, o "travar" no celular).
-    var chartAnimBefore = window.Chart && Chart.defaults ? Chart.defaults.animation : undefined;
-    if (window.Chart && Chart.defaults) Chart.defaults.animation = false;
-    swipeRendering_ = true;
-    try {
-      render(); // desenha a aba de destino no #view-root novo -- já cuida de scroll/destaque da barra sozinho
-    } finally {
-      swipeRendering_ = false;
-      if (window.Chart && Chart.defaults) Chart.defaults.animation = chartAnimBefore;
+    var holder = document.createElement('div');
+    holder.className = 'swipe-snapshot';
+    var snap = viewSnapshots_[s.targetView];
+    if (snap) {
+      var pos = scrollPositions_[s.targetView] || { x: 0, y: 0 };
+      holder.style.marginTop = (-pos.y) + 'px';
+      holder.appendChild(snap.cloneNode(true));
+    } else {
+      holder.innerHTML = SWIPE_SKELETON_HTML_;
     }
-    // render() leu a rolagem da janela DEPOIS da página já ter encolhido (o #view-root antigo
-    // saiu de #app); a posição certa da aba de origem é a de antes do gesto.
-    scrollPositions_[s.originalView] = { x: s.scrollX0, y: s.scrollY0 };
-    moveKeepingScroll_(document.getElementById('view-root'), s.paneNew);
+    s.paneNew.appendChild(holder);
+    swipePreviewChrome_(s.targetView);
     updateSwipeTransform_(s);
   }
 
@@ -16109,7 +16183,7 @@
     outgoingViewRoot.style.marginTop = (-window.scrollY) + 'px';
     outgoingViewRoot.id = 'view-root-outgoing'; // libera o id "view-root" pro novo, evita 2 elementos com o mesmo id ao mesmo tempo
     moveKeepingScroll_(outgoingViewRoot, s.paneOld); // mover zera a rolagem interna (Resumo...): devolve
-    var incomingViewRoot = document.createElement('div');
+    var incomingViewRoot = document.createElement('div'); // vazio, no lugar de verdade: o desenho de fim de troca entra nele
     incomingViewRoot.id = 'view-root';
     appEl.appendChild(incomingViewRoot);
 
@@ -16148,33 +16222,40 @@
 
     setTimeout(function () {
       var appEl = document.getElementById('app');
-      var newViewRoot = document.getElementById('view-root'); // ainda dentro de paneNew
+      var newViewRoot = document.getElementById('view-root'); // vazio, em #app (a foto é que está no painel)
       var oldViewRoot = document.getElementById('view-root-outgoing');
       if (committed) {
         destroyChartsWithin_(oldViewRoot);
-        moveKeepingScroll_(newViewRoot, appEl); // tira do paneNew, devolve pro lugar de verdade -- já está com tudo certo (render() cuidou disso em beginSwipeTransition_)
-        // render() (lá em beginSwipeTransition_) já tinha restaurado o scroll certo da
-        // aba destino -- mas mover os dois view-root pra fora do fluxo normal de #app
-        // durante a animação esvaziava a altura rolável da página inteira, e o
-        // navegador forçava a JANELA de volta pro topo sozinho (não tinha mais onde
-        // rolar). Refaz a restauração agora que #app tem conteúdo de novo (bug
-        // relatado: "reseta a posição do scroll vertical ao alternar abas").
+        oldViewRoot.remove();
+        // Agora sim o render de verdade da aba de destino, ainda escondido atrás do overlay (que mostra a foto): a troca da foto
+        // pelo conteúdo vivo acontece num único quadro, quando o overlay sai. Sem cascata, contagem nem animação de gráfico.
+        STATE.currentView = s.targetView;
+        var chartAnimBefore = window.Chart && Chart.defaults ? Chart.defaults.animation : undefined;
+        if (window.Chart && Chart.defaults) Chart.defaults.animation = false;
+        swipeRendering_ = true;
+        try {
+          render();
+        } finally {
+          swipeRendering_ = false;
+          if (window.Chart && Chart.defaults) Chart.defaults.animation = chartAnimBefore;
+        }
+        // render() leu a rolagem da janela com a página já encolhida (o view-root antigo saiu de #app): a posição certa
+        // da aba de origem é a de antes do gesto. E a de destino é restaurada de novo, já com #app cheio.
+        scrollPositions_[s.originalView] = { x: s.scrollX0, y: s.scrollY0 };
         var restoreNew = scrollPositions_[s.targetView] || { x: 0, y: 0 };
         window.scrollTo(restoreNew.x, restoreNew.y);
+        scheduleViewSnapshot_(); // a aba que acabou de abrir também ganha foto (o render acima não agenda)
       } else {
-        destroyChartsWithin_(newViewRoot);
         newViewRoot.remove();
         oldViewRoot.id = 'view-root';
         oldViewRoot.style.marginTop = ''; // desfaz o congelamento de scroll aplicado em beginSwipeTransition_
         moveKeepingScroll_(oldViewRoot, appEl); // devolve o ORIGINAL intacto (inclusive a rolagem do Resumo) -- não precisa re-renderizar, só recolocar no lugar
-        // Desfaz só o que render() (chamado em beginSwipeTransition_) já tinha mudado --
-        // STATE.currentView, scroll e destaque da barra -- sem reconstruir o conteúdo de
-        // novo (o view-root antigo já está intacto e recolocado, ver acima).
+        // Nada foi renderizado pra aba de destino: só desfaz o que o deslize mudou -- destaque da barra e botão-lápis.
         STATE.currentView = s.originalView;
         lastRenderedView_ = s.originalView;
         var restore = scrollPositions_[s.originalView] || { x: 0, y: 0 };
         window.scrollTo(restore.x, restore.y);
-        syncTabbar_(s.originalView);
+        swipePreviewChrome_(s.originalView);
       }
       s.overlay.remove();
     }, SWIPE_ANIMATION_MS_);
