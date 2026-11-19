@@ -16283,6 +16283,9 @@
         swipePreviewChrome_(s.originalView);
       }
       s.overlay.remove();
+      // A cascata de entrada e as contagens (puladas no render escondido, atrás do overlay) começam agora, quando a aba aparece:
+      // igual à troca pelos botões da barra.
+      if (committed) motionAfterRender_(false);
     }, SWIPE_ANIMATION_MS_);
   }
 
@@ -17733,6 +17736,13 @@
       l.style.setProperty('--tw', Math.ceil(text.getBoundingClientRect().width) + 'px');
     });
   }
+  // A largura do nome é medida na hora da troca de aba; se a fonte (ou o peso 600 da aba ativa) ainda estava carregando, o nome
+  // ficava cortado ("Iníci"). Mede de novo quando as fontes terminam de carregar e quando a janela muda de tamanho.
+  if (document.fonts) {
+    if (document.fonts.ready) document.fonts.ready.then(measureTabLabels_);
+    if (document.fonts.addEventListener) document.fonts.addEventListener('loadingdone', measureTabLabels_);
+  }
+  window.addEventListener('resize', measureTabLabels_);
   function closeTabbarMore_() {
     var panel = document.getElementById('tabbar-more');
     var more = document.getElementById('tab-more');
