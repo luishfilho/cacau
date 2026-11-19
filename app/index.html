@@ -736,7 +736,7 @@
   svg.home-msg-ico { width: 0.9em; height: 0.9em; vertical-align: -0.1em; margin-right: 8px; fill: none; stroke: currentColor; stroke-width: 1.7; stroke-linecap: round; stroke-linejoin: round; }
   svg.home-msg-ico .moon-lit { fill: currentColor; }
   /* Entra com atraso (0,6 s): o card/aba aparece primeiro e a mensagem chega depois, com mais destaque. */
-  .home-msg-in { animation: home-msg-fade 1s cubic-bezier(.2,.8,.2,1) 0.6s both; }
+  .home-msg-in { animation: home-msg-fade 1s cubic-bezier(.2,.8,.2,1) 0.25s both; }
   @keyframes home-msg-fade { from { opacity: 0; transform: translateY(14px) scale(.97); filter: blur(3px); } to { opacity: 1; transform: none; filter: none; } }
   @media (prefers-reduced-motion: reduce) { .home-msg-in { animation: none; } }
   /* Card "Saldo do ciclo": faixa larga (esquerda = o que sobrou, direita = o que já saiu, por nome). */
@@ -749,6 +749,8 @@
   .cycle-bar .cycle-bar-left { background: var(--primary); }
   .cycle-legend .cycle-dot-left { background: var(--primary); }
   .cycle-legend { display: flex; flex-wrap: wrap; gap: 6px 14px; margin-top: 10px; font-size: 12px; color: var(--text-muted); }
+  .cycle-extra-link { background: none; border: none; padding: 0; margin: 0; font: inherit; cursor: pointer; text-align: left; }
+  @media (hover: hover) and (prefers-reduced-motion: no-preference) { .cycle-extra-link { transition: translate .15s ease, opacity .15s ease, scale .12s ease; } .cycle-extra-link:hover { translate: 3px 0; opacity: .85; } }
   .cycle-legend i { display: inline-block; width: 9px; height: 9px; border-radius: 50%; margin-right: 5px; }
   .cycle-saved { margin-top: 14px; padding-top: 12px; border-top: 1px solid var(--border); }
   .cycle-saved-title { font-size: 13px; color: var(--text-muted); margin-bottom: 8px; }
@@ -838,6 +840,17 @@
   .tree-tl-dot { width: 10px; height: 10px; margin: 1px 0 5px; border-radius: 50%; background: var(--surface, #fff); border: 2px solid var(--border); box-sizing: border-box; }
   .tree-tl-item.reached .tree-tl-dot { background: var(--primary); border-color: var(--primary); }
   .tree-tl-item.current .tree-tl-dot { width: 14px; height: 14px; margin: -1px 0 3px; box-shadow: 0 0 0 4px color-mix(in srgb, var(--primary) 25%, transparent); }
+  /* Janela do cacaueiro: as barras (progresso do estágio e trilho da linha do tempo) se desenham da esquerda pra direita
+     e as figuras da linha do tempo aparecem com um pop, logo depois da janela subir. */
+  @media (prefers-reduced-motion: no-preference) {
+    .tree-bar > span { animation: bar-reveal .8s cubic-bezier(.2,.8,.2,1) .3s backwards; }
+    .tree-tl-line > span { animation: bar-reveal .9s cubic-bezier(.2,.8,.2,1) .35s backwards; }
+    .tree-tl-item { animation: tl-pop .45s cubic-bezier(.34,1.4,.64,1) .3s backwards; }
+    .tree-tl-item:nth-child(n+4) { animation-delay: .38s; }
+    .tree-tl-item:nth-child(n+7) { animation-delay: .46s; }
+    @keyframes bar-reveal { from { clip-path: inset(0 100% 0 0); } to { clip-path: inset(0 0 0 0); } }
+    @keyframes tl-pop { from { opacity: 0; scale: .7; } }
+  }
   .tree-tl-name { font-size: 11px; line-height: 1.2; }
   .tree-tl-sub { font-size: 10.5px; line-height: 1.3; color: var(--text-muted); }
   .tree-tl-item:not(.reached) .tree-tl-name { color: var(--text-muted); font-weight: 600; }
@@ -1024,7 +1037,7 @@
     .cal-today-btn { transition: max-width .26s cubic-bezier(.2,.8,.2,1), padding .26s cubic-bezier(.2,.8,.2,1), margin .26s ease,
       opacity .2s ease, transform .26s cubic-bezier(.34,1.4,.64,1), border-width .26s ease, scale .12s ease; }
   }
-  /* Aba Fornecedores: filtros no topo (gruda ao rolar), lista com barrinha proporcional ao total e modal com gráfico de 12 meses. */
+  /* Aba Estabelecimentos: filtros no topo (gruda ao rolar), lista com barrinha proporcional ao total e modal com gráfico de 12 meses. */
   .sup-head-card { position: sticky; top: 0; z-index: 5; }
   .sup-caps { margin-bottom: 8px; }
   .sup-bar { display: block; height: 4px; border-radius: 2px; background: var(--border); margin-top: 6px; overflow: hidden; }
@@ -1544,6 +1557,19 @@
   .budget-switch input:checked, .settings-switch input:checked { background: var(--primary); }
   .budget-switch input:checked::after, .settings-switch input:checked::after { transform: translateX(16px); }
   /* Toggle de Configurações: o botão fica colado no texto (à esquerda dele), não solto no outro canto. */
+  /* Editor de cards do Início: pontinhos pra arrastar, nome e toggle. A linha arrastada acompanha o dedo; as outras abrem espaço. */
+  .home-card-row { position: relative; align-items: center; gap: 10px; touch-action: pan-y; }
+  .home-card-grip { flex: none; width: 28px; height: 32px; padding: 0; margin: 0; border: none; background: none; cursor: grab; touch-action: none; display: flex; align-items: center; justify-content: center; color: var(--text-muted); }
+  .home-card-grip svg { width: 20px; height: 20px; fill: none; stroke: currentColor; stroke-width: 3.2; stroke-linecap: round; }
+  .home-card-name { flex: 1; min-width: 0; }
+  .home-card-sw { padding: 0; flex: none; }
+  .home-card-row.dragging { z-index: 3; cursor: grabbing; box-shadow: var(--shadow); border-radius: 10px; background: var(--surface); scale: 1.02; }
+  .home-card-row.dragging .home-card-grip { cursor: grabbing; }
+  #home-cards-list.is-dragging { user-select: none; }
+  @media (prefers-reduced-motion: no-preference) {
+    .home-card-row { transition: transform .18s cubic-bezier(.2,.8,.2,1), box-shadow .18s ease, scale .18s ease; }
+    .home-card-row.dragging { transition: box-shadow .18s ease, scale .18s ease; }
+  }
   .settings-switch { display: flex; align-items: flex-start; gap: 10px; padding: 6px 0; cursor: pointer; }
   .settings-switch input { margin-top: 1px; }
   .settings-switch .grow { flex: 1; min-width: 0; }
@@ -1735,6 +1761,7 @@
   .confirm-popover-actions button { padding: 6px 12px; font-size: 12px; margin: 0; }
 
   .dropdown-popover { padding: 6px; }
+  .dd-chev { display: inline-block; }
   .pop-scroll { max-height: 260px; overflow-y: auto; }
   .dropdown-option {
     padding: 8px 12px;
@@ -1775,6 +1802,14 @@
     /* Botões A · afundar: a propriedade `scale` compõe com o transform que vários botões já usam. */
     button { transition: scale .12s ease; }
     button:not(:disabled):active { scale: .86; }
+    /* Botões de dropdown não afundam: a setinha gira e o menu abre com animação (abaixo). */
+    button.dd-btn:not(:disabled):active { scale: 1; }
+    .dd-chev, button.app-select svg { transition: transform .22s cubic-bezier(.2,.8,.2,1); }
+    button.dd-open .dd-chev, button.app-select.dd-open svg { transform: rotate(180deg); }
+    .dropdown-popover.dd-pop-in { animation: dd-pop-below .2s cubic-bezier(.2,.8,.2,1) backwards; transform-origin: 50% 0; }
+    .dropdown-popover.dd-pop-in:not(.tip-below) { animation-name: dd-pop-above; transform-origin: 50% 100%; }
+    @keyframes dd-pop-below { from { opacity: 0; transform: translateY(-8px) scale(.94); } }
+    @keyframes dd-pop-above { from { opacity: 0; transform: translateY(8px) scale(.94); } }
     /* Troca de aba D · cascata: cada bloco da tela sobe, um depois do outro. */
     .view-enter > * { animation: view-rise .42s cubic-bezier(.2,.8,.2,1) backwards; }
     .view-enter > *:nth-child(2) { animation-delay: .06s; }
@@ -1786,7 +1821,7 @@
     @keyframes view-rise { from { opacity: 0; transform: translateY(16px); } }
     /* A mensagem do Início tem animação própria (com atraso): sem esta regra a cascata acima a sobrescrevia, a mensagem
        aparecia na hora, e quando a classe view-enter saía (1,1 s) a própria animação recomeçava -- sumia e reaparecia. */
-    .view-enter > .home-msg.home-msg-in { animation: home-msg-fade 1s cubic-bezier(.2,.8,.2,1) 0.6s both; }
+    .view-enter > .home-msg.home-msg-in { animation: home-msg-fade 1s cubic-bezier(.2,.8,.2,1) 0.25s both; }
     /* Abrir janelas · sobe da base da tela (a janela já nasce encostada embaixo; nas centralizadas, sobe um pouco). */
     .modal.modal-pop { animation: modal-rise .38s cubic-bezier(.2,.8,.2,1) backwards; }
     .modal-backdrop.modal-pop-bd { animation: modal-fade .25s ease backwards; }
@@ -1890,7 +1925,7 @@
   <div class="tabbar-more" id="tabbar-more">
     <button class="tab-btn" data-view="accounts" aria-label="Contas"><svg class="tab-ico" viewBox="0 0 24 24" aria-hidden="true"><rect x="2" y="5" width="20" height="14" rx="2"/><path d="M2 10h20M6 15h4"/></svg><span class="tab-label"><span>Contas</span></span></button>
     <button class="tab-btn" data-view="categories" aria-label="Categorias"><svg class="tab-ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M20.6 13.4l-7.2 7.2a2 2 0 0 1-2.8 0L3 13V3h10l7.6 7.6a2 2 0 0 1 0 2.8z"/><circle cx="7.5" cy="7.5" r="1"/></svg><span class="tab-label"><span>Categorias</span></span></button>
-    <button class="tab-btn" data-view="suppliers" aria-label="Fornecedores"><svg class="tab-ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 9l1.5-5h15L21 9"/><path d="M3 9a3 3 0 0 0 6 0 3 3 0 0 0 6 0 3 3 0 0 0 6 0"/><path d="M5 12.5V20h14v-7.5M10 20v-4.5h4V20"/></svg><span class="tab-label"><span>Fornecedores</span></span></button>
+    <button class="tab-btn" data-view="suppliers" aria-label="Estabelecimentos"><svg class="tab-ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 9l1.5-5h15L21 9"/><path d="M3 9a3 3 0 0 0 6 0 3 3 0 0 0 6 0 3 3 0 0 0 6 0"/><path d="M5 12.5V20h14v-7.5M10 20v-4.5h4V20"/></svg><span class="tab-label"><span>Estabelecimentos</span></span></button>
   </div>
   <div class="dock-row">
     <nav class="tabbar">
@@ -1955,7 +1990,7 @@
   };
   // Ícones (traço único, cor do texto) de cada tipo de conta -- no lugar do "(Conta corrente)" ao lado do nome.
   var ACCOUNT_TYPE_ICONS_ = {
-    checking: '<path d="M3 10l9-6 9 6"/><path d="M5 10v8M9.5 10v8M14.5 10v8M19 10v8"/><path d="M3 20h18"/>',
+    checking: '<path d="M9 3.5h6l-1.4 3h-3.2z"/><path d="M10.4 6.5C6.2 8.6 4 12.2 4 15.6 4 19.2 7.2 21 12 21s8-1.8 8-5.4c0-3.4-2.2-7-6.4-9.1"/><path d="M12 10.8v7.4M14.2 12.3c-.5-.6-1.3-.9-2.2-.9-1.2 0-2.1.6-2.1 1.6s.9 1.4 2.1 1.7 2.1.7 2.1 1.7-.9 1.6-2.1 1.6c-1 0-1.8-.3-2.3-.9"/>',
     savings: '<circle cx="9" cy="9" r="5"/><path d="M15.5 7.5a5 5 0 1 1-3.4 8.9"/><path d="M9 7v4M7.5 8.5h3"/>',
     cash: '<rect x="2.5" y="6" width="19" height="12" rx="2"/><circle cx="12" cy="12" r="2.6"/><path d="M6 9.5v.01M18 14.5v.01"/>',
     credit_card: '<rect x="2.5" y="5" width="19" height="14" rx="2.5"/><path d="M2.5 10h19M6 15h4"/>',
@@ -2178,11 +2213,50 @@
     if (!motionOk_ || !e.target.closest) return;
     var cap = e.target.closest('.capsule');
     // Chaves e chips D · pop do chip tocado.
-    if (cap && cap.animate) cap.animate([{ scale: 1 }, { scale: 1.15 }, { scale: 1 }], { duration: 350, easing: 'ease-out' });
+    // (botão de dropdown não faz o pop: ele gira a setinha e abre o menu com animação)
+    if (cap && cap.animate && !cap.classList.contains('dd-btn')) cap.animate([{ scale: 1 }, { scale: 1.07 }, { scale: 1 }], { duration: 300, easing: 'ease-out' });
     var el = e.target.closest('.row-clickable, .card');
     if (!el || (e.target.closest('button, input, select, textarea, a') && e.target.closest('button, input, select, textarea, a') !== el)) return;
     if (!el.classList.contains('row-clickable') && getComputedStyle(el).cursor !== 'pointer') return;
     shineElement_(el);
+  }, true);
+  /** Botões que trocam de cor ao toque (cápsulas ligadas/desligadas, botões com aria-pressed): a cor nova entra como um
+   *  círculo que cresce a partir do ponto tocado (mesma ideia, 175 ms e curva do "claro/escuro" do Automations Dashboard).
+   *  Como: antes da ação roda, uma cópia do botão com a aparência ANTIGA fica por cima; depois da ação, se a cor mudou,
+   *  a cópia recua (clip-path) até o ponto tocado revelando a nova por baixo; se não mudou, a cópia some na hora. */
+  var FILL_EASING_ = 'cubic-bezier(0.22,0.61,0.36,1)', FILL_MS_ = 175;
+  document.addEventListener('click', function (e) {
+    if (!motionOk_ || !e.target.closest || !document.body.animate) return;
+    var btn = e.target.closest('.capsule, button[aria-pressed]');
+    if (!btn || btn.classList.contains('dd-btn') || btn.disabled) return;
+    var r = btn.getBoundingClientRect();
+    if (r.width < 8 || r.height < 8) return;
+    var before = getComputedStyle(btn).backgroundColor;
+    var x = e.clientX || r.left + r.width / 2, y = e.clientY || r.top + r.height / 2;
+    var ghost = btn.cloneNode(true);
+    ghost.removeAttribute('id');
+    ghost.setAttribute('aria-hidden', 'true');
+    ghost.tabIndex = -1;
+    ghost.style.cssText = 'position:fixed;z-index:300;margin:0;pointer-events:none;box-sizing:border-box;left:' + r.left + 'px;top:' + r.top +
+      'px;width:' + r.width + 'px;height:' + r.height + 'px;scale:1;transition:none;animation:none';
+    document.body.appendChild(ghost);
+    var done = false;
+    function finish() { if (!done) { done = true; ghost.remove(); } }
+    setTimeout(function () {
+      var cur = btn.isConnected ? btn : null;
+      if (!cur) { // a lista foi redesenhada: acha o botão equivalente no mesmo lugar
+        var at = document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2);
+        cur = at && at.closest && at.closest('.capsule, button[aria-pressed]'); // a cópia tem pointer-events:none, não atrapalha
+      }
+      if (!cur || getComputedStyle(cur).backgroundColor === before) { finish(); return; }
+      var cr = cur.getBoundingClientRect();
+      var rad = Math.ceil(Math.max(Math.hypot(x - cr.left, y - cr.top), Math.hypot(x - cr.right, y - cr.top),
+        Math.hypot(x - cr.left, y - cr.bottom), Math.hypot(x - cr.right, y - cr.bottom)));
+      var cx = x - r.left, cy = y - r.top;
+      ghost.animate([{ clipPath: 'circle(' + rad + 'px at ' + cx + 'px ' + cy + 'px)' }, { clipPath: 'circle(0px at ' + cx + 'px ' + cy + 'px)' }],
+        { duration: FILL_MS_, easing: FILL_EASING_, fill: 'forwards' }).onfinish = finish;
+      setTimeout(finish, FILL_MS_ + 300);
+    }, 0);
   }, true);
   // Brilho também ao PASSAR O MOUSE num card clicável (o toque abre menu/janela por cima e o brilho quase não era visto).
   if (window.matchMedia && window.matchMedia('(hover: hover)').matches) document.addEventListener('mouseover', function (e) {
@@ -2853,6 +2927,13 @@
       return '<div class="dropdown-option' + (opt.selected ? ' active' : '') + '" data-value="' + escapeHtml(opt.value) + '">' + escapeHtml(opt.label) + '</div>';
     }).join('');
     positionPopover(anchorEl, pop);
+    // Botão de dropdown: sem afundar/esticar; a setinha gira enquanto o menu está aberto e o menu abre com animação
+    // (a classe da animação entra DEPOIS de posicionar, pra medida do menu não pegar o 1º quadro encolhido).
+    if (anchorEl && anchorEl.classList) {
+      anchorEl.classList.add('dd-btn', 'dd-open');
+      if (anchorEl.getAnimations) anchorEl.getAnimations().forEach(function (a) { a.cancel(); });
+    }
+    pop.classList.add('dd-pop-in');
     var stopListening;
     var nav = createDropdownKeyNav_(pop);
     // Captura (antes do listener global de Enter/Esc do modal): ↑/↓ trocam a opção
@@ -2867,6 +2948,7 @@
     }
     function cleanup() {
       pop.remove(); stopListening();
+      if (anchorEl && anchorEl.classList) anchorEl.classList.remove('dd-open');
       document.removeEventListener('keydown', onKey, true);
       activeConfirmPopoverCleanup_ = null;
     }
@@ -2895,7 +2977,7 @@
   function appSelectHtml_(id, options, selectedValue) {
     var sel = options.filter(function (o) { return o.value === selectedValue; })[0] || options[0] || { value: '', label: '' };
     return '<input type="hidden" id="' + id + '" value="' + escapeHtml(sel.value) + '">' +
-      '<button type="button" class="app-select" data-app-select="' + id + '" data-options="' + escapeHtml(JSON.stringify(options)) + '">' +
+      '<button type="button" class="app-select dd-btn" data-app-select="' + id + '" data-options="' + escapeHtml(JSON.stringify(options)) + '">' +
       '<span class="app-select-label">' + escapeHtml(sel.label) + '</span>' +
       '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 9l6 6 6-6"/></svg></button>';
   }
@@ -4809,10 +4891,7 @@
     { id: 'recent', label: 'Últimos lançamentos' }
   ];
   var HOME_CARDS_KEY_ = 'financas-home-cards'; // por aparelho, como o tema e o lado da barra de abas
-  var HOME_MOVE_ICONS_ = {
-    up: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 15l6-6 6 6"/></svg>',
-    down: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 9l6 6 6-6"/></svg>'
-  };
+  var HOME_GRIP_ICON_ = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 6h.01M15 6h.01M9 12h.01M15 12h.01M9 18h.01M15 18h.01"/></svg>';
   /** { order: [ids de todos os cards], hidden: [ids escondidos] } -- sempre completo e válido: id
    *  desconhecido sai; card novo (que a versão guardada não conhecia) entra no fim, visível. */
   function homeCardsPrefs_() {
@@ -4835,20 +4914,84 @@
   function openHomeCardsModal_() {
     function listHtml() {
       var prefs = homeCardsPrefs_();
-      return prefs.order.map(function (id, i) {
+      return prefs.order.map(function (id) {
         var card = HOME_CARDS_.filter(function (c) { return c.id === id; })[0];
-        return '<div class="row home-card-row">' +
-          '<label style="display:flex;align-items:center;gap:10px;flex:1;margin:0;cursor:pointer">' +
-            '<input type="checkbox" data-home-card="' + id + '" style="width:auto;margin:0"' + (prefs.hidden.indexOf(id) === -1 ? ' checked' : '') + '> ' + escapeHtml(card.label) +
-          '</label>' +
-          '<span style="display:flex;gap:6px">' +
-            '<button type="button" class="secondary home-card-move" data-home-move="up" data-home-id="' + id + '" aria-label="Subir ' + escapeHtml(card.label) + '"' + (i === 0 ? ' disabled' : '') + '>' + HOME_MOVE_ICONS_.up + '</button>' +
-            '<button type="button" class="secondary home-card-move" data-home-move="down" data-home-id="' + id + '" aria-label="Descer ' + escapeHtml(card.label) + '"' + (i === prefs.order.length - 1 ? ' disabled' : '') + '>' + HOME_MOVE_ICONS_.down + '</button>' +
-          '</span></div>';
+        return '<div class="row home-card-row" data-home-row="' + id + '">' +
+          '<button type="button" class="home-card-grip" data-home-grip="' + id + '" aria-label="Arrastar ' + escapeHtml(card.label) + ' (ou use as setas do teclado)">' + HOME_GRIP_ICON_ + '</button>' +
+          '<span class="home-card-name">' + escapeHtml(card.label) + '</span>' +
+          '<label class="settings-switch home-card-sw"><input type="checkbox" role="switch" data-home-card="' + id + '" aria-label="Mostrar ' + escapeHtml(card.label) + '"' + (prefs.hidden.indexOf(id) === -1 ? ' checked' : '') + '></label>' +
+          '</div>';
       }).join('');
+    }
+    /** Arrastar pra reordenar: a linha acompanha o dedo/mouse, as outras abrem espaço e a solta encaixa no lugar. */
+    function wireDrag(host) {
+      host.querySelectorAll('[data-home-grip]').forEach(function (grip) {
+        var id = grip.dataset.homeGrip;
+        grip.onpointerdown = function (e) {
+          if (e.button) return; // só o botão principal
+          e.preventDefault();
+          var rows = Array.prototype.slice.call(host.querySelectorAll('.home-card-row'));
+          var row = grip.closest('.home-card-row');
+          var from = rows.indexOf(row), to = from, n = rows.length;
+          var step = n > 1 ? rows[1].offsetTop - rows[0].offsetTop : row.offsetHeight;
+          var startY = e.clientY;
+          try { grip.setPointerCapture(e.pointerId); } catch (err) { /* segue sem captura */ }
+          row.classList.add('dragging');
+          host.classList.add('is-dragging');
+          function place(dy) {
+            row.style.transform = 'translateY(' + dy + 'px)';
+            to = Math.max(0, Math.min(n - 1, Math.round(from + dy / step)));
+            rows.forEach(function (r, i) {
+              if (r === row) return;
+              var shift = 0;
+              if (from < to && i > from && i <= to) shift = -step;
+              else if (from > to && i < from && i >= to) shift = step;
+              r.style.transform = shift ? 'translateY(' + shift + 'px)' : '';
+            });
+          }
+          function onMove(ev) { place(Math.max(-from * step, Math.min((n - 1 - from) * step, ev.clientY - startY))); }
+          function onEnd() {
+            grip.removeEventListener('pointermove', onMove);
+            grip.removeEventListener('pointerup', onEnd);
+            grip.removeEventListener('pointercancel', onEnd);
+            row.classList.remove('dragging');
+            row.classList.add('settling');
+            row.style.transform = 'translateY(' + ((to - from) * step) + 'px)';
+            setTimeout(function () {
+              if (to !== from) {
+                var prefs = homeCardsPrefs_();
+                prefs.order.splice(from, 1);
+                prefs.order.splice(to, 0, id);
+                homeCardsPrefsSave_(prefs);
+                renderDashboard();
+              }
+              if (host.isConnected) wire();
+            }, motionOk_ ? 190 : 0);
+          }
+          grip.addEventListener('pointermove', onMove);
+          grip.addEventListener('pointerup', onEnd);
+          grip.addEventListener('pointercancel', onEnd);
+        };
+        grip.onkeydown = function (e) { // teclado: setas sobem/descem o card
+          var dir = e.key === 'ArrowUp' ? -1 : e.key === 'ArrowDown' ? 1 : 0;
+          if (!dir) return;
+          e.preventDefault();
+          var prefs = homeCardsPrefs_();
+          var i = prefs.order.indexOf(id), j = i + dir;
+          if (i === -1 || j < 0 || j >= prefs.order.length) return;
+          prefs.order.splice(i, 1);
+          prefs.order.splice(j, 0, id);
+          homeCardsPrefsSave_(prefs);
+          wire();
+          renderDashboard();
+          var again = host.querySelector('[data-home-grip="' + id + '"]');
+          if (again) again.focus();
+        };
+      });
     }
     function wire() {
       var host = document.getElementById('home-cards-list');
+      host.classList.remove('is-dragging');
       host.innerHTML = listHtml();
       host.querySelectorAll('input[data-home-card]').forEach(function (cb) {
         cb.onchange = function () {
@@ -4860,22 +5003,11 @@
           renderDashboard();
         };
       });
-      host.querySelectorAll('button[data-home-move]').forEach(function (btn) {
-        btn.onclick = function () {
-          var prefs = homeCardsPrefs_();
-          var i = prefs.order.indexOf(btn.dataset.homeId);
-          var j = btn.dataset.homeMove === 'up' ? i - 1 : i + 1;
-          if (i === -1 || j < 0 || j >= prefs.order.length) return;
-          var tmp = prefs.order[i]; prefs.order[i] = prefs.order[j]; prefs.order[j] = tmp;
-          homeCardsPrefsSave_(prefs);
-          wire();
-          renderDashboard();
-        };
-      });
+      wireDrag(host);
     }
     openModal(
       '<h2>Cards do Início</h2>' +
-      '<div class="muted" style="margin-bottom:12px">Marque o que aparece e use as setas pra mudar a ordem. Vale só neste aparelho.</div>' +
+      '<div class="muted" style="margin-bottom:12px">Ligue o que aparece e arraste pelos pontinhos pra mudar a ordem. Vale só neste aparelho.</div>' +
       '<div id="home-cards-list"></div>' +
       '<div style="display:flex;gap:8px;margin-top:14px">' +
         '<button type="button" class="secondary" id="home-cards-reset" style="flex:1">Restaurar padrão</button>' +
@@ -4964,6 +5096,8 @@
     placeTimePinLabels_(root);
     document.querySelectorAll('.amount-expense[data-tooltip], .amount-income[data-tooltip], .tx-flag-icon[data-tooltip]').forEach(wireTooltipTrigger_);
 
+    var cycleExtraBtn = document.getElementById('cycle-extra-btn');
+    if (cycleExtraBtn) cycleExtraBtn.onclick = viewCycleExtraIncome_;
     setupBudgetBarMenus_(root);
 
     document.querySelectorAll('#view-root [data-tx]').forEach(function (el) {
@@ -5069,7 +5203,7 @@
     }
     var spentTotal = segments.reduce(function (s, x) { return s + x.amount; }, 0);
     return {
-      incomeLabel: main.label, start: main.expectedAmount, extra: extra, spentTotal: spentTotal,
+      incomeLabel: main.label, mainId: main.id, start: main.expectedAmount, extra: extra, spentTotal: spentTotal,
       remaining: main.expectedAmount - spentTotal + extra, segments: segments,
       fromYmd: win.fromYmd, toYmd: win.toYmd, daysLeft: daysBetweenYmd_(opts.today, win.nextYmd)
     };
@@ -5121,6 +5255,18 @@
     });
     return any ? total : null;
   }
+  /** Filtro do Extrato pra "+ R$ X de outras receitas": receitas do ciclo, menos o próprio salário e o que está fora das análises. */
+  var cycleExtraFilter_ = null;
+  function viewCycleExtraIncome_() {
+    if (!cycleExtraFilter_) return;
+    STATE.txFilters = Object.assign({}, cycleExtraFilter_);
+    STATE.txFiltersExpanded = false; // colapsado, o card mostra o que está filtrando (chip "Outras receitas")
+    STATE.txVisibleCount = TX_PAGE_SIZE;
+    STATE.txCalendarScrollLeft = null;
+    STATE.currentView = 'transactions';
+    delete scrollPositions_.transactions;
+    render();
+  }
   function cycleBalanceHtml_() {
     var today = todayYmd();
     var model = cycleBalanceModel_({
@@ -5130,19 +5276,20 @@
     if (!model) {
       return '<div class="card"><h2>Saldo do ciclo</h2><div class="empty-state">Cadastre seu salário como recorrente de receita mensal, com dia fixo, pra acompanhar o saldo entre um salário e outro.</div></div>';
     }
+    cycleExtraFilter_ = { kind: 'income', excludeForecastId: model.mainId, onlyAnalyzed: true, dateFrom: model.fromYmd, dateTo: model.toYmd };
     var denom = Math.max(model.start + model.extra, model.spentTotal, 1);
     var bar = '';
     if (model.remaining > 0) bar += '<span class="cycle-bar-left" style="width:' + (model.remaining / denom * 100).toFixed(2) + '%"></span>';
     model.segments.forEach(function (seg, i) {
-      bar += '<span style="width:' + (seg.amount / denom * 100).toFixed(2) + '%;background:' + CYCLE_BALANCE_PALETTE_[i % CYCLE_BALANCE_PALETTE_.length] + '" title="' + escapeHtml(seg.label + ': ' + fmtMoney(seg.amount)) + '"></span>';
+      bar += '<span style="width:' + (seg.amount / denom * 100).toFixed(2) + '%;background:' + CYCLE_BALANCE_PALETTE_[i % CYCLE_BALANCE_PALETTE_.length] + '" title="' + escapeHtml(seg.label + ': ' + fmtMoneyNoCents_(seg.amount)) + '"></span>';
     });
-    var legend = (model.remaining > 0 ? '<span><i class="cycle-dot-left"></i>Sobra ' + fmtMoney(model.remaining) + '</span>' : '') + model.segments.map(function (seg, i) {
-      return '<span><i style="background:' + CYCLE_BALANCE_PALETTE_[i % CYCLE_BALANCE_PALETTE_.length] + '"></i>' + escapeHtml(seg.label) + ' ' + fmtMoney(seg.amount) + '</span>';
+    var legend = (model.remaining > 0 ? '<span><i class="cycle-dot-left"></i>Sobra ' + fmtMoneyNoCents_(model.remaining) + '</span>' : '') + model.segments.map(function (seg, i) {
+      return '<span><i style="background:' + CYCLE_BALANCE_PALETTE_[i % CYCLE_BALANCE_PALETTE_.length] + '"></i>' + escapeHtml(seg.label) + ' ' + fmtMoneyNoCents_(seg.amount) + '</span>';
     }).join('');
-    if (model.extra > 0) legend += '<span class="amount-income">+ ' + fmtMoney(model.extra) + ' de outras receitas</span>';
+    if (model.extra > 0) legend += '<button type="button" class="cycle-extra-link amount-income" id="cycle-extra-btn" title="Ver essas receitas no Extrato">+ ' + fmtMoneyNoCents_(model.extra) + ' de outras receitas</button>';
     var big = model.remaining < 0
-      ? '<span class="amount-expense">-' + fmtMoney(-model.remaining) + '</span> <span class="muted">estourou o ciclo</span>'
-      : fmtMoney(model.remaining) + ' <span class="muted">de ' + fmtMoney(model.start) + '</span>';
+      ? '<span class="amount-expense">-' + fmtMoneyNoCents_(-model.remaining) + '</span> <span class="muted">estourou o ciclo</span>'
+      : fmtMoneyNoCents_(model.remaining) + ' <span class="muted">de ' + fmtMoneyNoCents_(model.start) + '</span>';
 
     var saved = '';
     var startYmd = budgetEngagementStart_();
@@ -5152,8 +5299,8 @@
       budgetsSavings: startYmd ? budgetsSavingsSinceStart_(startYmd, today) : null
     });
     var items = [];
-    if (measures.improvement !== null) items.push('<div><strong>' + fmtMoney(measures.improvement) + '</strong><span class="muted">sobra acima dos seus 2 primeiros meses</span></div>');
-    if (measures.belowCaps !== null) items.push('<div><strong>' + fmtMoney(measures.belowCaps) + '</strong><span class="muted">gasto abaixo dos tetos dos orçamentos</span></div>');
+    if (measures.improvement !== null) items.push('<div><strong>' + fmtMoneyNoCents_(measures.improvement) + '</strong><span class="muted">sobra acima dos seus 2 primeiros meses</span></div>');
+    if (measures.belowCaps !== null) items.push('<div><strong>' + fmtMoneyNoCents_(measures.belowCaps) + '</strong><span class="muted">gasto abaixo dos tetos dos orçamentos</span></div>');
     if (items.length) saved = '<div class="cycle-saved"><div class="cycle-saved-title">Você economizou desde o início</div><div class="cycle-saved-items">' + items.join('') + '</div></div>';
 
     return '<div class="card cycle-card">' +
@@ -6295,7 +6442,8 @@
         categoryIds: categoryIds.slice(),
         text: document.getElementById('f-text').value || undefined,
         dateFrom: document.getElementById('f-from').value || undefined,
-        dateTo: document.getElementById('f-to').value || undefined
+        dateTo: document.getElementById('f-to').value || undefined,
+        kind: STATE.txFilters.kind, excludeForecastId: STATE.txFilters.excludeForecastId, onlyAnalyzed: STATE.txFilters.onlyAnalyzed // vindos do card Saldo do ciclo; só o X do cabeçalho limpa
       };
       STATE.txVisibleCount = TX_PAGE_SIZE; // novo filtro = recomeça do topo, não do "carregar mais" anterior
       STATE.txCalendarScrollLeft = null; // filtro novo = volta a rolar pras semanas mais recentes (ver renderTxCalendarWeeks_)
@@ -6361,6 +6509,7 @@
         if (cat) chips.push({ text: cat.name });
       });
     }
+    if (f.kind) chips.push({ text: f.excludeForecastId ? 'Outras receitas' : f.kind === 'income' ? 'Receitas' : 'Despesas' });
     if (f.text) chips.push({ text: f.text, isSearch: true });
     if (f.dateFrom || f.dateTo) {
       var dateLabel = f.dateFrom && f.dateTo ? fmtDate(f.dateFrom) + '–' + fmtDate(f.dateTo)
@@ -6389,6 +6538,10 @@
   function txMatchesFilters(t, f) {
     if (f.accountId && t.accountId !== f.accountId) return false;
     if (f.categoryIds && f.categoryIds.length && f.categoryIds.indexOf(t.categoryId) === -1) return false;
+    // Filtro "Outras receitas" do card Saldo do ciclo (viewCycleExtraIncome_): só um tipo, sem o salário e sem o que está fora das análises.
+    if (f.kind && t.kind !== f.kind) return false;
+    if (f.excludeForecastId && t.forecastId === f.excludeForecastId) return false;
+    if (f.onlyAnalyzed && t.excludeFromAnalysis) return false;
     if (f.text) {
       var needle = f.text.trim().toLowerCase();
       // (Number||0).toLocaleString('pt-BR') em vez de fmtMoney: fmtMoney usa o formato de
@@ -6423,7 +6576,7 @@
   }
 
   function txFiltersActive_(f) {
-    return !!(f.accountId || (f.categoryIds && f.categoryIds.length) || f.text || f.dateFrom || f.dateTo);
+    return !!(f.accountId || (f.categoryIds && f.categoryIds.length) || f.text || f.dateFrom || f.dateTo || f.kind || f.excludeForecastId);
   }
 
   /**
@@ -8039,6 +8192,7 @@
     function cancelGlide_() {
       if (glideFrame) { cancelAnimationFrame(glideFrame); glideFrame = null; }
     }
+    container._cancelGlide = cancelGlide_; // o botão "Hoje" para o planador antes de rolar até hoje (senão os dois brigam e a rolagem acelera)
     // velocityPxMs: px/ms de deslocamento do CURSOR (não do scrollLeft, que anda ao
     // contrário -- ver document.onmousemove) no instante em que soltou.
     function startGlide_(velocityPxMs) {
@@ -8172,6 +8326,7 @@
       var key = calScrollKey_();
       STATE[key] = null; // volta ao comportamento "centrado em hoje" (ver positionTxCalendarScroll_)
       wrap._userScrolled = false;
+      if (wrap._cancelGlide) wrap._cancelGlide(); // planador (inércia do arrastar) em andamento
       wrap.scrollTo({ left: calTodayScrollLeft_(wrap), behavior: motionOk_ ? 'smooth' : 'auto' });
       btn.classList.remove('cal-today-show'); // some na hora, sem esperar a rolagem terminar
     };
@@ -8433,7 +8588,7 @@
       if (a.description) parts.push(escapeHtml(a.description));
       investInfo = ' · ' + parts.join(' · ');
     }
-    return '<div class="row" data-row-account="' + escapeHtml(a.id) + '"><span>' + accountNameHtml_(a.name, a.colorIndex) + '<br><span class="muted">' + fmtMoney(a.balance) + investInfo + '</span></span>' +
+    return '<div class="row" data-row-account="' + escapeHtml(a.id) + '"><span>' + accountTypeIconHtml_(a.type) + accountNameHtml_(a.name, a.colorIndex) + '<br><span class="muted">' + fmtMoney(a.balance) + investInfo + '</span></span>' +
       '<span class="row-actions">' + rowRemoveButtonHtml_('data-archive', a.id, 'Arquivar') + '</span></div>';
   }
 
@@ -8757,7 +8912,7 @@
     document.getElementById('add-category').onclick = function () { openCategoryModal(); };
   }
 
-  // ---------- aba Fornecedores (os "Pago a" / "Recebido de" dos lançamentos) ----------
+  // ---------- aba Estabelecimentos (os "Pago a" / "Recebido de" dos lançamentos) ----------
   // Agrupa os lançamentos pelo nome do estabelecimento (sem diferenciar maiúsculas/acentos/espaços) e mostra o total, a
   // quantidade, a média, a 1ª/última data, as categorias e a evolução mês a mês, com filtros de tipo, período, categoria e busca.
   var SUPPLIER_PERIODS_ = [
@@ -8778,7 +8933,7 @@
   function supplierKey_(name) {
     return String(name || '').trim().replace(/\s+/g, ' ').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase();
   }
-  /** Estatísticas por fornecedor. `list` já vem filtrada (tipo/período/categoria); `amountOf(t)` dá o valor líquido do lançamento.
+  /** Estatísticas por estabelecimento ('Pago a' / 'Recebido de'). `list` já vem filtrada (tipo/período/categoria); `amountOf(t)` dá o valor líquido do lançamento.
    *  Sem "Pago a" preenchido o lançamento não entra (vira `withoutName`). Pura (só dados) -- testável. */
   function supplierStats_(list, amountOf) {
     var map = {}, out = [], withoutName = { count: 0, total: 0 };
@@ -8844,17 +8999,17 @@
     root.innerHTML =
       '<div class="card sup-head-card">' +
         '<div style="display:flex;justify-content:space-between;align-items:baseline;gap:8px;flex-wrap:wrap">' +
-          '<h2 style="margin:0">Fornecedores</h2><div id="sup-summary" class="muted" style="font-size:12px"></div>' +
+          '<h2 style="margin:0">Estabelecimentos</h2><div id="sup-summary" class="muted" style="font-size:12px"></div>' +
         '</div>' +
         '<div style="padding-top:12px">' +
           '<label>Tipo</label>' + capsules('sup-kind', [{ value: 'expense', label: 'Pago a' }, { value: 'income', label: 'Recebido de' }], ui.kind) +
           '<label>Período</label>' + capsules('sup-period', SUPPLIER_PERIODS_, ui.period) +
           '<div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:12px">' +
-            '<button type="button" class="capsule" id="sup-cat-btn"></button>' +
-            '<button type="button" class="capsule" id="sup-sort-btn"></button>' +
+            '<button type="button" class="capsule dd-btn" id="sup-cat-btn"></button>' +
+            '<button type="button" class="capsule dd-btn" id="sup-sort-btn"></button>' +
           '</div>' +
           '<div style="position:relative">' +
-            '<input type="text" id="sup-text" style="padding-right:32px;margin-bottom:0" value="' + escapeHtml(ui.text) + '" placeholder="Buscar fornecedor...">' +
+            '<input type="text" id="sup-text" style="padding-right:32px;margin-bottom:0" value="' + escapeHtml(ui.text) + '" placeholder="Buscar estabelecimento...">' +
             '<button type="button" id="sup-text-clear" title="Limpar busca" ' +
               'style="position:absolute;right:4px;top:0;bottom:0;margin:auto 0;width:24px;height:24px;padding:0;background:none;border:none;' +
               'color:var(--text-muted);font-size:18px;line-height:1;cursor:pointer;align-items:center;justify-content:center;display:' + (ui.text ? 'flex' : 'none') + '">×</button>' +
@@ -8905,9 +9060,9 @@
     function refresh() {
       var cat = STATE.categories.find(function (x) { return x.id === ui.categoryId; });
       var sortLabel = (SUPPLIER_SORTS_.filter(function (o) { return o.value === ui.sort; })[0] || {}).label;
-      document.getElementById('sup-sort-btn').textContent = 'Ordenar: ' + sortLabel + ' ▾';
+      document.getElementById('sup-sort-btn').innerHTML = 'Ordenar: ' + escapeHtml(sortLabel || '') + ' <span class="dd-chev">▾</span>';
       var catBtn = document.getElementById('sup-cat-btn');
-      catBtn.textContent = (ui.categoryId === '_none' ? 'Sem categoria' : cat ? cat.name : 'Todas as categorias') + ' ▾';
+      catBtn.innerHTML = escapeHtml(ui.categoryId === '_none' ? 'Sem categoria' : cat ? cat.name : 'Todas as categorias') + ' <span class="dd-chev">▾</span>';
       catBtn.classList.toggle('active', !!ui.categoryId);
       renderSupplierList_();
     }
@@ -8925,7 +9080,7 @@
     var shown = supplierSort_(stats.suppliers.filter(function (s) { return !q || s.key.indexOf(q) !== -1; }), ui.sort);
     var total = shown.reduce(function (sum, s) { return sum + s.total; }, 0);
     var summary = document.getElementById('sup-summary');
-    if (summary) summary.textContent = shown.length + (shown.length === 1 ? ' fornecedor' : ' fornecedores') + ' · ' + fmtMoney(total);
+    if (summary) summary.textContent = shown.length + (shown.length === 1 ? ' estabelecimento' : ' estabelecimentos') + ' · ' + fmtMoney(total);
 
     var cls = ui.kind === 'income' ? 'amount-income' : 'amount-expense';
     var max = shown.reduce(function (m, s) { return Math.max(m, Math.abs(s.total)); }, 0) || 1;
@@ -8945,7 +9100,7 @@
         ' sem "' + label + '" (' + escapeHtml(fmtMoney(stats.withoutName.total)) + ') não aparecem aqui.</div>'
       : '';
     host.innerHTML = '<div class="card">' + (rows || '<div class="empty-state">' +
-      (ui.text || ui.categoryId ? 'Nenhum fornecedor com esses filtros.' : 'Nenhum fornecedor ainda — preencha o campo "' + label + '" nos lançamentos.') + '</div>') + noName + '</div>';
+      (ui.text || ui.categoryId ? 'Nenhum estabelecimento com esses filtros.' : 'Nenhum estabelecimento ainda — preencha o campo "' + label + '" nos lançamentos.') + '</div>') + noName + '</div>';
     host.querySelectorAll('[data-sup]').forEach(function (el) {
       el.onclick = function () {
         var s = shown.filter(function (x) { return x.key === el.dataset.sup; })[0];
@@ -8963,7 +9118,7 @@
     var catsHtml = cats.map(function (c) {
       return '<div class="row"><span>' + categoryLabelHtml(c.id || null) + '</span><span class="muted">' + Math.round(Math.abs(c.amount) / totalAbs * 100) + '% · ' + escapeHtml(fmtMoney(c.amount)) + '</span></div>';
     }).join('');
-    // últimos 12 meses (até o mês atual, ou o do último lançamento do fornecedor se for futuro)
+    // últimos 12 meses (até o mês atual, ou o do último lançamento do estabelecimento se for futuro)
     var endYm = todayYmd().slice(0, 7);
     if (s.last.slice(0, 7) > endYm) endYm = s.last.slice(0, 7);
     var endIdx = monthIndexOfYm_(endYm), months = [], peak = 0;
@@ -17016,7 +17171,7 @@
     { name: 'Reembolsos', scope: 'vínculos e valores a receber', view: 'refunds' },
     { name: 'Contas', scope: 'contas, saldos e arquivadas', view: 'accounts' },
     { name: 'Categorias', scope: 'categorias, ícones e subcategorias', view: 'categories' },
-    { name: 'Fornecedores', scope: 'totais e filtros por "Pago a"', view: 'suppliers' },
+    { name: 'Estabelecimentos', scope: 'totais e filtros por "Pago a"', view: 'suppliers' },
     { name: 'Captura de notificações', scope: 'lançamentos automáticos no Android' },
     { name: 'Barra de abas e botões', scope: 'navegação, + e botões flutuantes' },
     { name: 'Aparência', scope: 'tema, cores e textos' },
@@ -17446,7 +17601,7 @@
   }
 
   /** Marca a aba ativa na barra (a ativa mostra o nome; as outras só o ícone, com o nome no
-   *  tooltip). Contas, Categorias e Fornecedores moram no "Mais": quando uma delas está ativa, o botão
+   *  tooltip). Contas, Categorias e Estabelecimentos moram no "Mais": quando uma delas está ativa, o botão
    *  "Mais" assume o ícone e o nome dela. */
   function syncTabbar_(view) {
     document.querySelectorAll('.tab-btn[data-view]').forEach(function (btn) {
@@ -17481,6 +17636,22 @@
 
   // Tooltip da barra de abas só aparece depois de 2 s com o mouse parado (pedido de 19/11/2026); no toque longo continua rápido.
   var TAB_TOOLTIP_DELAY_MS_ = 2000;
+  /** Tira o menu de sugestões do navegador ("As informações foram salvas", valores antigos digitados) dos campos de texto:
+   *  o app tem os próprios autocompletes. Vale pros campos que já existem e pros que aparecem depois (janelas, telas). */
+  function suppressBrowserAutofill_() {
+    function mark(root) {
+      var list = root.querySelectorAll ? root.querySelectorAll('input:not([autocomplete]), textarea:not([autocomplete])') : [];
+      for (var i = 0; i < list.length; i++) list[i].setAttribute('autocomplete', 'off');
+      if (root.matches && root.matches('input:not([autocomplete]), textarea:not([autocomplete])')) root.setAttribute('autocomplete', 'off');
+    }
+    mark(document.body);
+    if (typeof MutationObserver !== 'function') return;
+    new MutationObserver(function (muts) {
+      muts.forEach(function (m) {
+        for (var i = 0; i < m.addedNodes.length; i++) if (m.addedNodes[i].nodeType === 1) mark(m.addedNodes[i]);
+      });
+    }).observe(document.body, { childList: true, subtree: true });
+  }
   function setupSidebar_() {
     var nav = document.querySelector('nav.tabbar');
     if (!nav) return;
@@ -17568,6 +17739,7 @@
     setupScrollToTopButton_();
     setupDateTimePickerAutoOpen_();
     setupAppSelects_();
+    suppressBrowserAutofill_();
     document.getElementById('theme-toggle').onclick = toggleTheme_;
     updateThemeToggleIcon_();
     var settingsBtn = document.getElementById('settings-btn');
