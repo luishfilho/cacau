@@ -734,6 +734,22 @@
   .home-msg-in { animation: home-msg-fade 0.9s ease-out both; }
   @keyframes home-msg-fade { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
   @media (prefers-reduced-motion: reduce) { .home-msg-in { animation: none; } }
+  /* Card "Saldo do ciclo": faixa larga (esquerda = o que sobrou, direita = o que já saiu, por nome). */
+  .cycle-head { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; flex-wrap: wrap; margin-bottom: 6px; }
+  .cycle-head h2 { margin-bottom: 0; }
+  .cycle-big { font-size: 24px; font-weight: 600; margin-bottom: 10px; }
+  .cycle-big .muted { font-size: 13px; font-weight: 400; }
+  .cycle-bar { display: flex; height: 26px; border-radius: 13px; overflow: hidden; background: var(--border); }
+  .cycle-bar span { display: block; height: 100%; min-width: 2px; }
+  .cycle-bar .cycle-bar-left { background: var(--primary); }
+  .cycle-legend .cycle-dot-left { background: var(--primary); }
+  .cycle-legend { display: flex; flex-wrap: wrap; gap: 6px 14px; margin-top: 10px; font-size: 12px; color: var(--text-muted); }
+  .cycle-legend i { display: inline-block; width: 9px; height: 9px; border-radius: 50%; margin-right: 5px; }
+  .cycle-saved { margin-top: 14px; padding-top: 12px; border-top: 1px solid var(--border); }
+  .cycle-saved-title { font-size: 13px; color: var(--text-muted); margin-bottom: 8px; }
+  .cycle-saved-items { display: flex; flex-wrap: wrap; gap: 8px 28px; }
+  .cycle-saved-items strong { display: block; font-size: 18px; }
+  .cycle-saved-items .muted { font-size: 12px; }
   #edit-cards-btn { top: 100px; }
   #settings-btn ~ #edit-cards-btn { top: 144px; }
   #edit-cards-btn[hidden] { display: none; }
@@ -4734,6 +4750,7 @@
 
   // ---------- cards do Início: quais aparecem e em que ordem ----------
   var HOME_CARDS_ = [
+    { id: 'cycle', label: 'Saldo do ciclo' },
     { id: 'trend', label: 'Projeção do saldo' },
     { id: 'budgets', label: 'Orçamentos' },
     { id: 'summary', label: 'Resumo' },
@@ -4872,6 +4889,7 @@
     var prefs = homeCardsPrefs_();
     var shown = prefs.order.filter(function (id) { return prefs.hidden.indexOf(id) === -1; });
     var cardHtml = {
+      cycle: function () { return cycleBalanceHtml_(); },
       trend: function () { return buildBalanceTrendHtml_(); },
       budgets: function () { return budgetTimelineHtml; },
       summary: function () { return buildTxCalendarHtml_('home'); },
@@ -4927,6 +4945,176 @@
       });
     }
 
+  }
+
+  // ---------- saldo do ciclo (card do Início, 19/11/2026) ----------
+  // Representação lúdica do saldo entre um salário e outro: a faixa começa cheia no 1º dia do ciclo, no valor
+  // PREVISTO da maior receita recorrente mensal de dia fixo (o "salário"); cada despesa já lançada tira um pedaço
+  // (agrupado pelo nome do recorrente, senão do orçamento da categoria, senão "Orçamento geral") e as outras
+  // receitas devolvem volume. Só o que de fato aconteceu: nada de projeção. Cartão conta na data da compra.
+  var CYCLE_BALANCE_PALETTE_ = ['#b9916a', '#d3b28d', '#a07a55', '#e3cdb0', '#c9a27a', '#ecdcc6']; // tons de areia: o que já saiu (a sobra é o marrom forte)
+  var CYCLE_BALANCE_MAX_SEGMENTS_ = 6;
+  var CYCLE_BALANCE_GENERAL_LABEL_ = 'Orçamento geral';
+  var SAVED_MIN_AMOUNT_ = 50;
+  var SAVED_MIN_DAYS_ = 30;
+
+  /** O "salário": recorrente de receita mensal com dia fixo de MAIOR valor previsto (null = não há). */
+  function cycleBalanceMainIncome_(forecasts) {
+    var best = null;
+    (forecasts || []).forEach(function (f) {
+      if (f.archived || f.kind !== 'income' || f.intervalUnit !== 'months' || f.intervalDays !== 1 || !f.dayOfMonth) return;
+      if (!best || f.expectedAmount > best.expectedAmount) best = f;
+    });
+    return best;
+  }
+  /** Ciclo que contém `ymd`: do dia do salário (dia 31 num mês de 30 vira 30) até a véspera do próximo. */
+  function cycleBalanceWindowAt_(dayOfMonth, ymd) {
+    function startOf(ym) { return ym + '-' + String(Math.min(Number(dayOfMonth), daysInMonth_(ym))).padStart(2, '0'); }
+    var idx = monthIndexOfYm_(ymd.slice(0, 7));
+    if (startOf(ymOfMonthIndex_(idx)) > ymd) idx -= 1;
+    var fromYmd = startOf(ymOfMonthIndex_(idx));
+    var nextYmd = startOf(ymOfMonthIndex_(idx + 1));
+    return { fromYmd: fromYmd, toYmd: addDaysYmd_(nextYmd, -1), nextYmd: nextYmd };
+  }
+  /**
+   * Modelo do card. opts = { today, forecasts, transactions, budgets, deletingIds, netExpense(tx), netIncome(tx) }.
+   * null = sem salário cadastrado. segments = o que já saiu, do maior pro menor (além de CYCLE_BALANCE_MAX_SEGMENTS_
+   * vira "Outros"); remaining = previsto - saiu + outras receitas (negativo = estourou o ciclo).
+   */
+  function cycleBalanceModel_(opts) {
+    var main = cycleBalanceMainIncome_(opts.forecasts);
+    if (!main) return null;
+    var win = cycleBalanceWindowAt_(main.dayOfMonth, opts.today);
+    var forecastById = {};
+    (opts.forecasts || []).forEach(function (f) { forecastById[f.id] = f; });
+    var realBudgets = (opts.budgets || []).filter(function (b) { return !b.archived && !b.isUnbudgetedCatchAll; });
+    var byLabel = {}, labels = [], extra = 0;
+    (opts.transactions || []).forEach(function (t) {
+      if (!t.date || t.date < win.fromYmd || t.date > win.toYmd || t.excludeFromAnalysis) return;
+      if ((opts.deletingIds || []).indexOf(t.id) !== -1) return;
+      if (t.kind === 'expense') {
+        var amount = opts.netExpense(t);
+        if (!(amount > 0.004)) return;
+        var label = CYCLE_BALANCE_GENERAL_LABEL_;
+        var f = t.forecastId ? forecastById[t.forecastId] : null;
+        if (f) label = f.label;
+        else {
+          var b = realBudgets.filter(function (x) { return (x.categoryIds || []).indexOf(t.categoryId) !== -1; })[0];
+          if (b) label = b.categoryName;
+        }
+        if (!(label in byLabel)) { byLabel[label] = 0; labels.push(label); }
+        byLabel[label] += amount;
+      } else if (t.kind === 'income') {
+        if (t.forecastId === main.id) return; // o próprio salário já é o ponto de partida
+        var inc = opts.netIncome(t);
+        if (inc > 0.004) extra += inc;
+      }
+    });
+    var segments = labels.map(function (l) { return { label: l, amount: byLabel[l] }; })
+      .sort(function (a, b) { return b.amount - a.amount; });
+    if (segments.length > CYCLE_BALANCE_MAX_SEGMENTS_) {
+      var rest = segments.slice(CYCLE_BALANCE_MAX_SEGMENTS_ - 1);
+      segments = segments.slice(0, CYCLE_BALANCE_MAX_SEGMENTS_ - 1).concat([{
+        label: 'Outros', amount: rest.reduce(function (s, x) { return s + x.amount; }, 0)
+      }]);
+    }
+    var spentTotal = segments.reduce(function (s, x) { return s + x.amount; }, 0);
+    return {
+      incomeLabel: main.label, start: main.expectedAmount, extra: extra, spentTotal: spentTotal,
+      remaining: main.expectedAmount - spentTotal + extra, segments: segments,
+      fromYmd: win.fromYmd, toYmd: win.toYmd, daysLeft: daysBetweenYmd_(opts.today, win.nextYmd)
+    };
+  }
+  /**
+   * "Você economizou X desde o início": só depois de SAVED_MIN_DAYS_ dias de uso e cada medida só entra quando passa
+   * de SAVED_MIN_AMOUNT_. opts = { today, start (início do engajamento ou null), monthlySurplus: {ym: sobra}, budgetsSavings }.
+   *  - improvement: quanto a sobra mensal dos meses fechados depois dos 2 primeiros passou da média desses 2 (precisa de 3 meses fechados);
+   *  - belowCaps: soma de (teto - gasto) dos orçamentos em cada ciclo fechado desde o início.
+   */
+  function savedSinceStart_(opts) {
+    var out = { improvement: null, belowCaps: null };
+    if (!opts.start || daysBetweenYmd_(opts.start, opts.today) < SAVED_MIN_DAYS_) return out;
+    var months = budgetClosedMonths_(opts.start, opts.today, 600);
+    if (months.length >= 3) {
+      var s = months.map(function (ym) { return opts.monthlySurplus[ym] || 0; });
+      var baseline = (s[0] + s[1]) / 2;
+      var total = 0;
+      for (var i = 2; i < s.length; i++) total += s[i] - baseline;
+      if (total > SAVED_MIN_AMOUNT_) out.improvement = total;
+    }
+    if (opts.budgetsSavings !== null && opts.budgetsSavings !== undefined && opts.budgetsSavings > SAVED_MIN_AMOUNT_) out.belowCaps = opts.budgetsSavings;
+    return out;
+  }
+  /** Sobra (receitas - despesas, líquidas de reembolso, fora das análises e transferências) por mês de calendário. */
+  function monthlySurplusMap_(transactions, deletingIds, netExpense, netIncome) {
+    var map = {};
+    (transactions || []).forEach(function (t) {
+      if (!t.date || t.excludeFromAnalysis || (deletingIds || []).indexOf(t.id) !== -1) return;
+      var ym = t.date.slice(0, 7);
+      if (t.kind === 'expense') map[ym] = (map[ym] || 0) - netExpense(t);
+      else if (t.kind === 'income') map[ym] = (map[ym] || 0) + netIncome(t);
+    });
+    return map;
+  }
+  /** Soma de (teto - gasto) dos orçamentos reais em cada ciclo FECHADO que começa depois de startYmd; null = nenhum. */
+  function budgetsSavingsSinceStart_(startYmd, todayStr) {
+    var total = 0, any = false;
+    STATE.budgets.filter(function (b) { return !b.archived && !b.isUnbudgetedCatchAll; }).forEach(function (b) {
+      var amount = budgetBaseAmount_(b);
+      if (!(amount > 0)) return;
+      var cur = budgetCycleForDate_(b, todayStr);
+      for (var i = cur.index - 1; i >= cur.index - 120; i--) {
+        var c = budgetCycleAtIndex_(b, i);
+        if (c.fromYmd < startYmd) break;
+        total += budgetLimitForRange_(b, amount, c.fromYmd, c.toYmd) - spentForBudgetInRange_(b.categoryIds, c.fromYmd, c.toYmd, true);
+        any = true;
+      }
+    });
+    return any ? total : null;
+  }
+  function cycleBalanceHtml_() {
+    var today = todayYmd();
+    var model = cycleBalanceModel_({
+      today: today, forecasts: STATE.forecasts, transactions: STATE.allTransactions, budgets: STATE.budgets,
+      deletingIds: STATE.deletingIds, netExpense: netAmountOfPassive_, netIncome: netContributionOfActive_
+    });
+    if (!model) {
+      return '<div class="card"><h2>Saldo do ciclo</h2><div class="empty-state">Cadastre seu salário como recorrente de receita mensal, com dia fixo, pra acompanhar o saldo entre um salário e outro.</div></div>';
+    }
+    var denom = Math.max(model.start + model.extra, model.spentTotal, 1);
+    var bar = '';
+    if (model.remaining > 0) bar += '<span class="cycle-bar-left" style="width:' + (model.remaining / denom * 100).toFixed(2) + '%"></span>';
+    model.segments.forEach(function (seg, i) {
+      bar += '<span style="width:' + (seg.amount / denom * 100).toFixed(2) + '%;background:' + CYCLE_BALANCE_PALETTE_[i % CYCLE_BALANCE_PALETTE_.length] + '" title="' + escapeHtml(seg.label + ': ' + fmtMoney(seg.amount)) + '"></span>';
+    });
+    var legend = (model.remaining > 0 ? '<span><i class="cycle-dot-left"></i>Sobra ' + fmtMoney(model.remaining) + '</span>' : '') + model.segments.map(function (seg, i) {
+      return '<span><i style="background:' + CYCLE_BALANCE_PALETTE_[i % CYCLE_BALANCE_PALETTE_.length] + '"></i>' + escapeHtml(seg.label) + ' ' + fmtMoney(seg.amount) + '</span>';
+    }).join('');
+    if (model.extra > 0) legend += '<span class="amount-income">+ ' + fmtMoney(model.extra) + ' de outras receitas</span>';
+    var big = model.remaining < 0
+      ? '<span class="amount-expense">-' + fmtMoney(-model.remaining) + '</span> <span class="muted">estourou o ciclo</span>'
+      : fmtMoney(model.remaining) + ' <span class="muted">de ' + fmtMoney(model.start) + '</span>';
+
+    var saved = '';
+    var startYmd = budgetEngagementStart_();
+    var measures = savedSinceStart_({
+      today: today, start: startYmd,
+      monthlySurplus: monthlySurplusMap_(STATE.allTransactions, STATE.deletingIds, netAmountOfPassive_, netContributionOfActive_),
+      budgetsSavings: startYmd ? budgetsSavingsSinceStart_(startYmd, today) : null
+    });
+    var items = [];
+    if (measures.improvement !== null) items.push('<div><strong>' + fmtMoney(measures.improvement) + '</strong><span class="muted">sobra acima dos seus 2 primeiros meses</span></div>');
+    if (measures.belowCaps !== null) items.push('<div><strong>' + fmtMoney(measures.belowCaps) + '</strong><span class="muted">gasto abaixo dos tetos dos orçamentos</span></div>');
+    if (items.length) saved = '<div class="cycle-saved"><div class="cycle-saved-title">Você economizou desde o início</div><div class="cycle-saved-items">' + items.join('') + '</div></div>';
+
+    return '<div class="card cycle-card">' +
+      '<div class="cycle-head"><h2>Saldo do ciclo</h2><span class="muted">de ' + fmtDateShort_(model.fromYmd) + ' a ' + fmtDateShort_(model.toYmd) + ' · ' +
+        (model.daysLeft === 1 ? 'falta 1 dia' : 'faltam ' + model.daysLeft + ' dias') + '</span></div>' +
+      '<div class="cycle-big">' + big + '</div>' +
+      '<div class="cycle-bar" role="img" aria-label="Saldo do ciclo">' + bar + '</div>' +
+      (legend ? '<div class="cycle-legend">' + legend + '</div>' : '<div class="muted" style="font-size:13px;margin-top:8px">Nada saiu ainda neste ciclo.</div>') +
+      saved +
+    '</div>';
   }
 
   // ---------- botão "Revisar pendências" (abaixo do "+") ----------
