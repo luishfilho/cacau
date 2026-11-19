@@ -1784,6 +1784,9 @@
     .view-enter > *:nth-child(6) { animation-delay: .30s; }
     .view-enter > *:nth-child(n+7) { animation-delay: .36s; }
     @keyframes view-rise { from { opacity: 0; transform: translateY(16px); } }
+    /* A mensagem do Início tem animação própria (com atraso): sem esta regra a cascata acima a sobrescrevia, a mensagem
+       aparecia na hora, e quando a classe view-enter saía (1,1 s) a própria animação recomeçava -- sumia e reaparecia. */
+    .view-enter > .home-msg.home-msg-in { animation: home-msg-fade 1s cubic-bezier(.2,.8,.2,1) 0.6s both; }
     /* Abrir janelas · sobe da base da tela (a janela já nasce encostada embaixo; nas centralizadas, sobe um pouco). */
     .modal.modal-pop { animation: modal-rise .38s cubic-bezier(.2,.8,.2,1) backwards; }
     .modal-backdrop.modal-pop-bd { animation: modal-fade .25s ease backwards; }
