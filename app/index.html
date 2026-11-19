@@ -812,6 +812,8 @@
   .settings-row { display: flex; align-items: center; gap: 8px; padding: 6px 0; }
   .settings-row .grow { flex: 1; min-width: 0; }
   .settings-row button { padding: 6px 12px; font-size: 13px; white-space: nowrap; }
+  /* Selo das linhas que o app lançou sozinho e aguardam confirmação (ver AutoEntries.js). */
+  .auto-badge { display: inline-block; font-size: 10px; line-height: 14px; padding: 0 6px; border-radius: 999px; border: 1px solid var(--primary); color: var(--primary); white-space: nowrap; vertical-align: 1px; }
   .settings-ok { color: var(--income); font-weight: 600; }
   .settings-error { color: var(--expense); font-size: 13px; margin: 0 0 10px; }
   .settings-error[hidden] { display: none; }
@@ -1815,7 +1817,7 @@
 
   <script>var FINANCAS_MULTIUSER = true;</script>
   <script src="https://accounts.google.com/gsi/client" async defer></script>
-  <script src="cacau-web.js?v=45d30a24a7"></script>
+  <script src="cacau-web.js?v=25d00a31db"></script>
 <script>
   var STATE = {
     accounts: [],
@@ -1849,7 +1851,8 @@
     forecastSuggestionDismissals: [], // "Sugestão: R$X Aplicar" descartada de um recorrente (ver forecastRowHtml)
     balanceGoal: null, // meta de saldo do gráfico de projeção, em R$ (null = sem meta; ver computeBalanceTrend_)
     balanceGoalName: '', // nome opcional da meta ('' = sem nome)
-    counterpartyAliases: [] // nome de estabelecimento lembrado pro texto cru de "Pago a"/"Recebido de" (ver forecastCounterpartyNames_)
+    counterpartyAliases: [], // nome de estabelecimento lembrado pro texto cru de "Pago a"/"Recebido de" (ver forecastCounterpartyNames_)
+    autoEntriesEnabled: true // lançamentos automáticos ligados (ver AutoEntries.js; chave nas Configurações)
   };
 
   var ACCOUNT_TYPE_LABELS = {
@@ -4231,6 +4234,7 @@
     // gravação terminar devolveria o valor ANTIGO e faria a linha piscar de volta.
     STATE.balanceGoal = pendingBalanceGoal_ ? pendingBalanceGoal_.value : (data.balanceGoal || null);
     STATE.balanceGoalName = pendingBalanceGoal_ ? pendingBalanceGoal_.name : (data.balanceGoalName || '');
+    STATE.autoEntriesEnabled = data.autoEntriesEnabled !== false;
     STATE.plans = reapplyPendingEdits_(preserveOptimisticTempEntries_(STATE.plans, data.plans || []), pendingPlanEdits_);
     STATE.people = reapplyPendingEdits_(preserveOptimisticTempEntries_(STATE.people, data.people || []), pendingPersonEdits_);
     STATE.refundShares = preserveOptimisticTempEntries_(STATE.refundShares, data.refundShares || []);
@@ -4853,6 +4857,7 @@
     if (t.counterparty) mainLabel += ' · ' + escapeHtml(t.counterparty);
     var sub = accountNameHtml(t.accountId); // já vem em HTML (nome colorido/negrito) — números do sufixo não precisam escapar
     if (t.installmentSeq) sub += ' · parcela ' + t.installmentSeq + '/' + t.installmentTotal;
+    sub += autoBadgeHtml_(t);
     var whenLabel = fmtDate(t.date) + (t.time ? ' ' + t.time : '');
     var rowAttrs = (t.pending && !t.editable) ? ' class="row"' : ' class="row row-clickable" data-tx="' + escapeHtml(t.id) + '"';
     return '<div' + rowAttrs + '>' +
@@ -5723,6 +5728,7 @@
     if (t.counterparty) mainLabel += ' · ' + escapeHtml(t.counterparty);
     var sub = accountNameHtml(t.accountId); // já vem em HTML (nome colorido/negrito) — números do sufixo não precisam escapar
     if (t.installmentSeq) sub += ' · parcela ' + t.installmentSeq + '/' + t.installmentTotal;
+    sub += autoBadgeHtml_(t);
     var rowAttrs = (t.pending && !t.editable) ? ' class="row"' : ' class="row row-clickable" data-tx="' + escapeHtml(t.id) + '"';
     // Horário numa coluna própria (largura fixa, sempre presente mesmo vazio) — assim ele
     // fica centralizado verticalmente na linha toda (via align-items:center do .row) e não
@@ -6215,6 +6221,54 @@
     OPTIMISTIC_TX_EDIT_KEYS_.forEach(function (k) {
       if (payload[k] !== undefined) target[k] = payload[k];
     });
+  }
+
+  // ---------- lançamentos automáticos (ver AutoEntries.js) ----------
+  // O app já lançou sozinho no Extrato as pendências "toda conhecidas"; elas continuam na fila e as linhas ganham o selo
+  // "a confirmar" enquanto a pendência existir. Memoizado pela identidade da lista (txRowHtml roda por linha).
+  var autoPostedIdsMemo_ = { list: null, set: {} };
+  function autoPostedIds_() {
+    if (autoPostedIdsMemo_.list !== STATE.pendingEntries) {
+      var set = {};
+      STATE.pendingEntries.forEach(function (p) { (p.autoTxIds || []).forEach(function (id) { set[id] = true; }); });
+      autoPostedIdsMemo_ = { list: STATE.pendingEntries, set: set };
+    }
+    return autoPostedIdsMemo_.set;
+  }
+  function autoBadgeHtml_(t) {
+    return autoPostedIds_()[t.id] ? ' · <span class="auto-badge">a confirmar</span>' : '';
+  }
+  /**
+   * Confirmar/descartar uma pendência que já tem lançamento automático: tira esse lançamento da tela na hora (e desfaz o
+   * efeito dele nos saldos/totais do Início) pra a prévia da confirmação não somar em dobro. Devolve o que tirou; um
+   * refresh (feito pelos chamadores em caso de erro, e sempre após a mutação) traz o dado real.
+   */
+  function hideAutoPostedLocally_(p) {
+    var hidden = [];
+    (p.autoTxIds || []).forEach(function (id) {
+      var t = STATE.allTransactions.find(function (x) { return x.id === id; });
+      if (!t) return;
+      hidden.push(t);
+      STATE.deletingIds.push(id);
+      STATE.allTransactions = STATE.allTransactions.filter(function (x) { return x.id !== id; });
+      var d = STATE.dashboard;
+      if (!d) return;
+      if (d.recentTransactions) d.recentTransactions = d.recentTransactions.filter(function (x) { return x.id !== id; });
+      var sign = t.kind === 'income' ? 1 : -1;
+      var acc = d.accounts.find(function (a) { return a.id === t.accountId; });
+      if (acc) { acc.balance -= sign * t.amount; d.totalBalance -= sign * t.amount; }
+      if (t.date && t.date.indexOf(d.month) === 0 && !t.excludeFromAnalysis) {
+        if (t.kind === 'expense') {
+          var name = topLevelCategoryName(t.categoryId);
+          var bucket = d.expensesByCategory.find(function (e) { return e.category === name; });
+          if (bucket) bucket.amount -= t.amount;
+          d.totalExpenseMonth -= t.amount;
+        } else if (t.kind === 'income') {
+          d.totalIncomeMonth -= t.amount;
+        }
+      }
+    });
+    return hidden;
   }
 
   function removeTransactionOptimistically_(id) {
@@ -13796,11 +13850,13 @@
       var liveIdx = STATE.pendingEntries.findIndex(function (e) { return e.id === p.id; });
       var removedPending = liveIdx !== -1 ? STATE.pendingEntries.splice(liveIdx, 1)[0] : null;
       pendingEntryRemovals_[p.id] = true; // ver comentário grande em pendingEntryRemovals_
+      // Se o app já tinha lançado essa pendência sozinho, o lançamento some junto (ver AutoEntries.js).
+      var autoHiddenOnDiscard = hideAutoPostedLocally_(p);
       render(); // mantém a linha do tempo de orçamento (por trás do modal) sempre com a data da pendência mais antiga atual
       afterMutation_(run('discardPendingEntry', p.id)).catch(function (err) {
         if (removedPending) STATE.pendingEntries.push(removedPending);
         showToast(err.message, true);
-        render();
+        if (autoHiddenOnDiscard.length) refreshAll().then(render); else render();
       }).finally(function () { delete pendingEntryRemovals_[p.id]; });
       openPendingReviewModal(index + 1, queue);
     };
@@ -13861,6 +13917,9 @@
       var liveIdx = STATE.pendingEntries.findIndex(function (e) { return e.id === p.id; });
       var removedPending = liveIdx !== -1 ? STATE.pendingEntries.splice(liveIdx, 1)[0] : null;
       pendingEntryRemovals_[p.id] = true; // ver comentário grande em pendingEntryRemovals_
+      // Lançamento que o app já tinha criado sozinho (ver AutoEntries.js): sai da tela agora pra a prévia abaixo não
+      // somar em dobro; o servidor atualiza o MESMO lançamento (ou recria, se tipo/conta/parcelas mudaram).
+      hideAutoPostedLocally_(p);
       // Prévia otimista (ver applyOptimisticEntry) pra aparecer na hora — optimisticIds
       // guarda o(s) ID(s) temporário(s) DESSA confirmação específica pra
       // resolveCreatedTransactions_ trocar pelo dado de verdade assim que o PRÓPRIO
@@ -13885,6 +13944,8 @@
         return forecastSelectionP_.then(function (forecastId) {
           Object.assign(payload, forecastFieldsFromSelection_(forecastId, payload.date));
           return afterMutation_(run('confirmPendingEntry', payload).then(function (createdRows) {
+            // Atualizou o mesmo lançamento automático: o ID volta a valer (tinha sido escondido acima).
+            STATE.deletingIds = STATE.deletingIds.filter(function (id) { return !createdRows.some(function (r) { return r.id === id; }); });
             resolveCreatedTransactions_(optimisticIds, createdRows);
             // Espelha o encadeamento do Novo lançamento (FAB) — pessoas nomeadas
             // (stagedRefundShares) ou despesas marcadas pra vincular
@@ -16535,6 +16596,9 @@
       '<div class="settings-row"><div class="grow"></div>' +
         '<button class="secondary" id="st-goal-remove"' + (STATE.balanceGoal ? '' : ' disabled') + '>Remover meta</button>' +
         '<button id="st-goal-save">Salvar meta</button></div>' +
+      '<div class="settings-row" style="margin-top:10px"><div class="grow"><div>Lançar sozinho o que já é conhecido</div>' +
+      '<div class="muted">Quando fornecedor, categoria e conta já vêm do seu histórico, o lançamento entra no Extrato com o selo "a confirmar" e continua na fila até você confirmar ou descartar. Desligar não desfaz os que já entraram.</div></div>' +
+      '<label style="display:flex;align-items:center;gap:6px"><input type="checkbox" id="st-auto-entries"' + (STATE.autoEntriesEnabled ? ' checked' : '') + '></label></div>' +
       (analytics_().enabled() ?
         '<div class="settings-row" style="margin-top:10px"><div class="grow"><div>Ajudar a melhorar o Meu Cacau</div>' +
         '<div class="muted">Envia, de forma anônima, quais telas você usa e por quanto tempo. Nunca envia valores, nomes ou descrições dos seus lançamentos.</div></div>' +
@@ -16629,6 +16693,19 @@
       goalInput = fresh;
       setupMoneyInput(goalInput, 0);
       showToast('Meta removida');
+    };
+
+    // Lançamentos automáticos (ver AutoEntries.js): vale a partir da próxima atualização do app.
+    document.getElementById('st-auto-entries').onchange = function (e) {
+      var box = e.target, wanted = box.checked;
+      STATE.autoEntriesEnabled = wanted;
+      run('setAutoEntriesEnabled', wanted).then(function () {
+        showToast(wanted ? 'Lançamentos automáticos ligados' : 'Lançamentos automáticos desligados');
+      }).catch(function (err) {
+        STATE.autoEntriesEnabled = !wanted;
+        box.checked = !wanted;
+        showToast((err && err.message) || String(err), true);
+      });
     };
 
     var analyticsToggle = document.getElementById('st-analytics');

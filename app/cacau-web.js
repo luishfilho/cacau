@@ -812,6 +812,160 @@ function archiveAccount(id) {
   return updated;
 }
 
+// ===== AutoEntries.js =====
+/**
+ * Lançamentos automáticos (pedido de 19/11/2026).
+ *
+ * Quando uma pendência (notificação/email/importação) já é "toda conhecida" -- fornecedor, categoria e conta saem do
+ * HISTÓRICO já confirmado, sem nenhum palpite ("confira") -- o app já a lança sozinho no Extrato (entra no saldo e nos
+ * orçamentos). A pendência CONTINUA na fila "Lançamentos a confirmar", igual às outras, e fica lá até o usuário agir:
+ *   - Confirmar: o lançamento automático vira o lançamento definitivo (atualizado com o que o usuário ajustou; se mudou
+ *     tipo/conta/parcelas, é apagado e recriado);
+ *   - Descartar: o lançamento automático é apagado junto.
+ * Quais lançamentos são automáticos fica em PendingEntries.AutoTxIDs (a pendência aponta pro lançamento). O Extrato mostra
+ * o selo "a confirmar" nesses.
+ *
+ * Roda no começo de getBootstrapData (a cada abertura/atualização do app) -- o webhook do celular só captura o texto cru
+ * (ver captureRawNotification_) e nunca é alterado, então o lançamento automático acontece na próxima vez que o app abre.
+ * Ligado desde o início; dá pra desligar nas Configurações (AppSettings, chave 'autoEntries' = 'off').
+ */
+var AUTO_ENTRIES_SETTING_KEY_ = 'autoEntries';
+// Limite por rodada: cada lançamento é uma escrita na planilha; uma fila grande entra aos poucos (o resto na próxima abertura).
+var AUTO_POST_MAX_PER_RUN_ = 15;
+
+function getAppSetting_(key) {
+  var row = readAll_('AppSettings').find(function (r) { return r.Key === key; });
+  return row ? String(row.Value) : null;
+}
+
+function setAppSetting_(key, value) {
+  var existing = readAll_('AppSettings').find(function (r) { return r.Key === key; });
+  if (existing) updateRowById_('AppSettings', existing.ID, { Value: value, UpdatedAt: nowIso_() });
+  else appendRow_('AppSettings', { Key: key, Value: value, UpdatedAt: nowIso_() });
+}
+
+/** Ligado a menos que o usuário tenha desligado. */
+function isAutoEntriesEnabled_() {
+  return getAppSetting_(AUTO_ENTRIES_SETTING_KEY_) !== 'off';
+}
+
+/** Chamado pela tela de Configurações. Desligar NÃO desfaz os já lançados (ficam até o usuário confirmar/descartar). */
+function setAutoEntriesEnabled(enabled) {
+  setAppSetting_(AUTO_ENTRIES_SETTING_KEY_, enabled ? 'on' : 'off');
+  return !!enabled;
+}
+
+function splitAutoTxIds_(value) {
+  return String(value || '').split(',').map(function (s) { return s.trim(); }).filter(Boolean);
+}
+
+/** Primeira letra maiúscula, como o app faz com "Pago a" ao confirmar (capitalizeFirst_ do cliente). */
+function capitalizeFirstAuto_(s) {
+  s = String(s || '');
+  return s.charAt(0).toUpperCase() + s.slice(1);
+}
+
+/**
+ * entry: um item de listPendingEntries. Só entra o que o usuário confirmaria sem mexer em nada: despesa/receita simples
+ * (nada de transferência nem parcelado), com valor, não duplicata, conta sem palpite e categoria vinda de uma associação
+ * de fornecedor já confirmada antes (CounterpartyMappings) -- palavra-chave e palpite não valem.
+ */
+function pendingQualifiesForAutoPost_(entry, accountsById, categoriesById) {
+  if (entry.autoTxIds && entry.autoTxIds.length) return false;
+  if (entry.isDuplicate) return false;
+  if (!(Number(entry.suggestedAmount) > 0)) return false;
+  if (entry.suggestedKind !== 'expense' && entry.suggestedKind !== 'income') return false;
+  if (entry.suggestedInstallments && Number(entry.suggestedInstallments) > 1) return false;
+  if (!entry.counterparty || !entry.categoryFromHistory) return false;
+  if (!entry.suggestedAccountId || entry.accountGuess) return false;
+  var account = accountsById[entry.suggestedAccountId];
+  if (!account || String(account.Archived).toLowerCase() === 'true') return false;
+  if (account.Type === 'investment') return false;
+  if (entry.suggestedKind === 'income' && account.Type === 'credit_card') return false;
+  var category = categoriesById[entry.suggestedCategoryId];
+  if (!category || String(category.Archived).toLowerCase() === 'true' || category.Kind !== entry.suggestedKind) return false;
+  return true;
+}
+
+/**
+ * Lança sozinho as pendências que qualificam. Devolve { entries, posted } -- entries é a lista de pendências JÁ com
+ * autoTxIds atualizado (o getBootstrapData a reaproveita, sem reler) -- ou null quando desligado ou quando outra
+ * execução está lançando agora (a próxima atualização pega).
+ * A trava aqui é de OUTRO tipo da usada pelas escritas (withSheetLock_), pra não aninhar a mesma trava: duas abas abrindo
+ * juntas não lançam a mesma pendência duas vezes.
+ */
+function autoPostPendingEntries_() {
+  if (!isAutoEntriesEnabled_()) return null;
+  var guard = MULTIUSER_MODE ? LockService.getScriptLock() : LockService.getUserLock();
+  if (!guard.tryLock(3000)) return null;
+  try {
+    var entries = listPendingEntries();
+    var accountsById = {}, categoriesById = {};
+    var candidates = entries.filter(function (e) { return !(e.autoTxIds && e.autoTxIds.length); });
+    if (!candidates.length) return { entries: entries, posted: 0 };
+    readAll_('Accounts').forEach(function (a) { accountsById[a.ID] = a; });
+    readAll_('Categories').forEach(function (c) { categoriesById[c.ID] = c; });
+    var posted = 0;
+    // Do mais antigo pro mais novo: se a fila passar do limite, o resto é o que chegou depois.
+    candidates.slice().reverse().forEach(function (e) {
+      if (posted >= AUTO_POST_MAX_PER_RUN_) return;
+      if (!pendingQualifiesForAutoPost_(e, accountsById, categoriesById)) return;
+      try {
+        var created = createTransaction({
+          kind: e.suggestedKind, date: e.date, time: e.time, accountId: e.suggestedAccountId, categoryId: e.suggestedCategoryId,
+          amount: e.suggestedAmount, description: '',
+          // Mesmo nome que a janela de revisão já preencheria em "Pago a"/"Recebido de".
+          counterparty: capitalizeFirstAuto_(e.establishmentName || e.counterparty),
+          installments: 1
+        });
+        var ids = created.map(function (t) { return t.id; });
+        updateRowById_('PendingEntries', e.id, { AutoTxIDs: ids.join(',') });
+        e.autoTxIds = ids;
+        posted++;
+      } catch (err) {
+        console.error('autoPostPendingEntries_: não lançou a pendência ' + e.id + ': ' + (err && err.message));
+      }
+    });
+    return { entries: entries, posted: posted };
+  } finally {
+    guard.releaseLock();
+  }
+}
+
+/** Apaga os lançamentos criados sozinhos (usado ao descartar a pendência ou quando ela some da fila). Ignora os que já não existem. */
+function removeAutoPostedTransactions_(ids) {
+  splitAutoTxIds_(Array.isArray(ids) ? ids.join(',') : ids).forEach(function (id) {
+    try { deleteTransaction(id); } catch (err) { /* o usuário já apagou esse lançamento */ }
+  });
+}
+
+/**
+ * Confirmação de uma pendência que já tem lançamento automático. Devolve as linhas (mesmo formato de createTransaction)
+ * ou null quando precisa criar do zero (não havia lançamento, ou mudou tipo/conta/parcelas -- aí o antigo é apagado DEPOIS
+ * do novo existir, pra uma falha não perder nada).
+ * Se tipo, conta e parcelas continuam iguais, atualiza o MESMO lançamento -- assim reembolsos/vínculos que o usuário já
+ * tenha feito nele no Extrato não se perdem.
+ */
+function updateAutoPostedForConfirm_(pending, input, date, time, counterparty) {
+  var ids = splitAutoTxIds_(pending.AutoTxIDs);
+  if (!ids.length) return null;
+  if (ids.length !== 1 || input.kind === 'transfer') return null;
+  var existing = findById_('Transactions', ids[0]);
+  if (!existing) return null;
+  var installments = Number(input.installments || Number(pending.SuggestedInstallments) || 1);
+  if (existing.Kind !== input.kind || existing.AccountID !== input.accountId || installments > 1) return null;
+  var updates = {
+    id: existing.ID, date: date, time: time, categoryId: input.categoryId, accountId: input.accountId,
+    amount: input.amount, description: input.description || '', counterparty: counterparty,
+    excludeFromAnalysis: input.excludeFromAnalysis
+  };
+  if (input.forecastId !== undefined) {
+    updates.forecastId = input.forecastId;
+    updates.forecastCycleMonth = input.forecastCycleMonth;
+  }
+  return [mapTransactionRow_(updateTransaction(updates))];
+}
+
 // ===== Branding.js =====
 /**
  * Nome e ícone do app. O beta multiusuário se chama "Meu Cacau" (nome provisório); o app do
@@ -1560,6 +1714,17 @@ function include(filename) {
  */
 function getBootstrapData() {
   var errors = [];
+  // Lançamentos automáticos (ver AutoEntries.js): ANTES de ler as transações, pra o que acabou de ser lançado já vir
+  // nesta mesma carga. Devolve a lista de pendências já atualizada (reaproveitada abaixo) ou null.
+  var autoEntriesEnabled = true;
+  var autoResult = null;
+  try {
+    autoEntriesEnabled = isAutoEntriesEnabled_();
+    autoResult = autoPostPendingEntries_();
+  } catch (err) {
+    autoResult = null;
+    errors.push('lançamentos automáticos: ' + err.message);
+  }
   var allTxs = [];
   try {
     allTxs = readAll_('Transactions');
@@ -1604,7 +1769,7 @@ function getBootstrapData() {
   }
   var pendingEntries = [];
   try {
-    pendingEntries = listPendingEntries();
+    pendingEntries = autoResult && autoResult.entries ? autoResult.entries : listPendingEntries();
   } catch (err) {
     pendingEntries = [];
     errors.push('pendências: ' + err.message);
@@ -1725,6 +1890,7 @@ function getBootstrapData() {
     plans: plans, people: people, refundShares: refundShares, refundLinks: refundLinks,
     forecastCycleIgnores: forecastCycleIgnores, forecastSuggestionDismissals: forecastSuggestionDismissals,
     balanceGoal: balanceGoal, balanceGoalName: balanceGoalName,
+    autoEntriesEnabled: autoEntriesEnabled,
     // Seções que falharam ao carregar. Cada try/catch acima devolve vazio pra uma falha
     // não derrubar as outras — mas devolver vazio EM SILÊNCIO já enganou de um jeito
     // caro: quando readAll_('Transactions') estourava, todo saldo de conta passava a
@@ -2457,6 +2623,7 @@ function findAndClearRefundPair_(combinedText, amount) {
     '" (R$' + counterpart.SuggestedAmount + ', ID ' + counterpart.ID + ')'
   );
   deleteRowById_('PendingEntries', counterpart.ID);
+  removeAutoPostedTransactions_(counterpart.AutoTxIDs); // se o app já a tinha lançado sozinho (ver AutoEntries.js)
   return true;
 }
 
@@ -2665,6 +2832,7 @@ function markDuplicatePendingEntries_(entries) {
  * seguintes) e travava o app em "Carregando…" o tempo todo.
  */
 function purgeJunkPendingEntries_() {
+  var orphanAutoTxIds = [];
   withSheetLock_(function () {
     var sheet = getOrCreateSheet_('PendingEntries');
     var lastRow = sheet.getLastRow();
@@ -2698,6 +2866,13 @@ function purgeJunkPendingEntries_() {
     var kept = withDerived.filter(function (x) { return !cancelledIds[x.row.ID]; }).map(function (x) { return x.row; });
     if (kept.length === rows.length) return; // nada pra remover, evita reescrever à toa
 
+    // Pendência removida que o app já tinha lançado sozinho (AutoEntries.js): o lançamento some junto (apagado fora da trava).
+    var keptIds = {};
+    kept.forEach(function (row) { keptIds[row.ID] = true; });
+    rows.forEach(function (row) {
+      if (!keptIds[row.ID] && row.AutoTxIDs) orphanAutoTxIds.push(row.AutoTxIDs);
+    });
+
     sheet.getRange(2, 1, lastRow - 1, headers.length).clearContent();
     if (kept.length) {
       sheet.getRange(2, 1, kept.length, headers.length).setValues(
@@ -2705,6 +2880,7 @@ function purgeJunkPendingEntries_() {
       );
     }
   });
+  if (orphanAutoTxIds.length) removeAutoPostedTransactions_(orphanAutoTxIds);
 }
 
 function listPendingEntries() {
@@ -2751,7 +2927,8 @@ function listPendingEntries() {
     // pendências que já estão na fila, sem precisar recriar nada. Contraparte exata vem
     // primeiro (sinal mais forte — já foi confirmado antes pra esse mesmo nome); palpite
     // gravado na criação (ex: BankAppMappings) e palavra-chave são fallback nessa ordem.
-    var suggestedCategoryId = findCategoryIdForCounterparty_(derived.counterparty, allMappings) ||
+    var categoryFromHistory = findCategoryIdForCounterparty_(derived.counterparty, allMappings);
+    var suggestedCategoryId = categoryFromHistory ||
       p.SuggestedCategoryID ||
       findCategoryIdByKeyword_(derived.counterparty || p.Text, allCategories);
     var cat = categoriesById[suggestedCategoryId];
@@ -2780,7 +2957,11 @@ function listPendingEntries() {
       suggestedToAccountId: p.SuggestedToAccountID || null,
       suggestedToAccountName: toAcc ? toAcc.Name : null,
       suggestedInstallments: p.SuggestedInstallments === '' ? null : Number(p.SuggestedInstallments),
-      isDuplicate: false
+      isDuplicate: false,
+      // Categoria vinda de fornecedor já confirmado antes (não palavra-chave/palpite) e lançamentos que o app já criou
+      // sozinho pra essa pendência -- ver AutoEntries.js.
+      categoryFromHistory: !!categoryFromHistory,
+      autoTxIds: splitAutoTxIds_(p.AutoTxIDs)
     };
   }).sort(function (a, b) { return a.capturedAt < b.capturedAt ? 1 : -1; });
 
@@ -2893,7 +3074,11 @@ function confirmPendingEntry(input) {
   var counterparty = input.counterparty !== undefined ? input.counterparty : pending.Counterparty;
 
   var createdTransactions;
-  if (input.kind === 'transfer') {
+  // Lançamento automático (ver AutoEntries.js): se tipo/conta/parcelas não mudaram, atualiza o MESMO lançamento.
+  var updatedInPlace = updateAutoPostedForConfirm_(pending, input, date, time, counterparty);
+  if (updatedInPlace) {
+    createdTransactions = updatedInPlace;
+  } else if (input.kind === 'transfer') {
     var legs = createTransfer({
       date: date, time: time, fromAccountId: input.fromAccountId, toAccountId: input.toAccountId,
       amount: input.amount, description: input.description, billMonth: input.billMonth
@@ -2931,13 +3116,18 @@ function confirmPendingEntry(input) {
   }
   recordNinetyNineConfirmedSample_(pending);
 
+  // Havia lançamento automático e foi preciso criar outro (tipo/conta/parcelas mudaram): agora que o novo existe, apaga o antigo.
+  if (!updatedInPlace) removeAutoPostedTransactions_(pending.AutoTxIDs);
   deleteRowById_('PendingEntries', input.id);
   return createdTransactions;
 }
 
 function discardPendingEntry(id) {
+  var pending = findById_('PendingEntries', id);
   var removed = deleteRowById_('PendingEntries', id);
   if (!removed) throw new Error('Pendência não encontrada.');
+  // Descartar = "isso não é um lançamento": o que o app lançou sozinho some junto (ver AutoEntries.js).
+  if (pending) removeAutoPostedTransactions_(pending.AutoTxIDs);
   return true;
 }
 
@@ -3977,7 +4167,10 @@ var SCHEMA = {
   // sempre paga na mesma conta) ou de compra parcelada importada de um documento.
   PendingEntries: [
     'ID', 'App', 'Title', 'Text', 'SuggestedAmount', 'SuggestedKind', 'SuggestedAccountID', 'CreatedAt',
-    'Counterparty', 'SuggestedCategoryID', 'SourceMessageId', 'SuggestedToAccountID', 'SuggestedInstallments'
+    'Counterparty', 'SuggestedCategoryID', 'SourceMessageId', 'SuggestedToAccountID', 'SuggestedInstallments',
+    // IDs (separados por vírgula) dos lançamentos que o app já criou sozinho pra essa pendência (lançamentos
+    // automáticos, ver AutoEntries.js). A pendência continua na fila até o usuário confirmar ou descartar.
+    'AutoTxIDs'
   ],
   // Registro permanente de "esse email do 99Pay já foi avaliado" (ver EmailInbox.js).
   // Existe separado de PendingEntries porque essa aba tem linhas apagadas o tempo todo
@@ -4066,7 +4259,10 @@ var SCHEMA = {
   // Progresso do cacaueiro (ver Tree.js): no máximo UMA linha, com o estado em JSON na coluna
   // State. Vive na planilha (não nas propriedades do usuário nem no navegador) pra nunca se
   // perder ao trocar de aparelho, limpar o navegador ou recriar o acesso.
-  TreeState: ['ID', 'State', 'UpdatedAt']
+  TreeState: ['ID', 'State', 'UpdatedAt'],
+  // Preferências simples do app que vivem na planilha (uma linha por chave). Hoje só 'autoEntries'
+  // ('off' desliga os lançamentos automáticos; ausente = ligado, ver AutoEntries.js).
+  AppSettings: ['ID', 'Key', 'Value', 'UpdatedAt']
 };
 
 // Colunas que guardam datas como texto (ex: '2026-08-15', '2026-08') para
@@ -4973,6 +5169,7 @@ return {
   removeBudget: (typeof removeBudget === 'function' ? removeBudget : function () { throw new Error('"removeBudget" não existe na versão web.'); }),
   removeForecast: (typeof removeForecast === 'function' ? removeForecast : function () { throw new Error('"removeForecast" não existe na versão web.'); }),
   removePlan: (typeof removePlan === 'function' ? removePlan : function () { throw new Error('"removePlan" não existe na versão web.'); }),
+  setAutoEntriesEnabled: (typeof setAutoEntriesEnabled === 'function' ? setAutoEntriesEnabled : function () { throw new Error('"setAutoEntriesEnabled" não existe na versão web.'); }),
   setBalanceGoal: (typeof setBalanceGoal === 'function' ? setBalanceGoal : function () { throw new Error('"setBalanceGoal" não existe na versão web.'); }),
   setRefundLinksForActiveTransaction: (typeof setRefundLinksForActiveTransaction === 'function' ? setRefundLinksForActiveTransaction : function () { throw new Error('"setRefundLinksForActiveTransaction" não existe na versão web.'); }),
   setRefundSharesForPassiveTransaction: (typeof setRefundSharesForPassiveTransaction === 'function' ? setRefundSharesForPassiveTransaction : function () { throw new Error('"setRefundSharesForPassiveTransaction" não existe na versão web.'); }),
