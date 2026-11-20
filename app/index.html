@@ -4953,12 +4953,12 @@
   // {i:sky} = sol de dia, fase da lua à noite/madrugada; {i:nome-do-ícone} = ícone da frase; {nome} = primeiro nome (frase fora do sorteio sem nome).
   var HOME_GREETINGS_ = {
     morning: [
-      '{i:sky} Bom dia! Que o dia seja generoso com você (e com o saldo).',
+      '{i:sky} Bom dia! Que o dia seja generoso com você (e com o saldo)',
       '{i:sky} Bom dia, {nome}! Café na mão e o bolso em dia?',
-      '{i:sky} Manhã! Hoje é dia de gastar só o que vale a pena.',
+      '{i:sky} Manhã! Hoje é dia de gastar só o que vale a pena',
       '{i:sky} Bom dia! Que tal começar espiando como estão as contas?',
       '{i:sky} Opa, {nome}! Já acordou com o pé direito (e o saldo também)?',
-      '{i:sky} Bom dia! Respira fundo: um lançamento de cada vez.'
+      '{i:sky} Bom dia! Respira fundo: um lançamento de cada vez'
     ],
     afternoon: [
       '{i:sky} Boa tarde! Metade do dia já foi, e o orçamento?',
@@ -4967,46 +4967,46 @@
       '{i:sky} Boa tarde! Aquela comprinha de hoje já tá lançada?'
     ],
     evening: [
-      '{i:sky} Boa noite! Hora de fechar o dia com as contas em ordem.',
+      '{i:sky} Boa noite! Hora de fechar o dia com as contas em ordem',
       '{i:sky} Boa noite, {nome}! Missão do dia cumprida?',
-      '{i:sky} Noite chegando: bom momento pra lançar o que ficou pra trás.',
-      '{i:sky} Boa noite! Quem anota dorme mais tranquilo.'
+      '{i:sky} Noite chegando: bom momento pra lançar o que ficou pra trás',
+      '{i:sky} Boa noite! Quem anota dorme mais tranquilo'
     ],
     night: [
-      '{i:sky} Madrugada! Parabéns pela disposição, mas o saldo também merece descanso.',
-      '{i:sky} Acordado a essa hora, {nome}? Parabéns pela dedicação (e lembra de dormir!).',
-      '{i:sky} Coruja detectada! Parabéns por cuidar do dinheiro até de madrugada.',
+      '{i:sky} Madrugada! Parabéns pela disposição, mas o saldo também merece descanso',
+      '{i:sky} Acordado a essa hora, {nome}? Parabéns pela dedicação (e lembra de dormir!)',
+      '{i:sky} Coruja detectada! Parabéns por cuidar do dinheiro até de madrugada',
       '{i:sky} Que horas são essas? Parabéns pelo pique, {nome}!',
-      '{i:sky} Madrugada produtiva: dinheiro organizado vale mais que sono perdido… só um pouquinho.',
-      '{i:sky} Parabéns por estar de pé a essa hora! Anota rapidinho e vai descansar.'
+      '{i:sky} Madrugada produtiva: dinheiro organizado vale mais que sono perdido… só um pouquinho',
+      '{i:sky} Parabéns por estar de pé a essa hora! Anota rapidinho e vai descansar'
     ]
   };
   var HOME_ENGAGEMENT_ = [
     // Frases de economia descontraídas (aprovadas em 19/11/2026).
     '{i:coin} Se não comprar, o desconto é maior!',
-    '{i:bulb} Em dúvida se precisa comprar algo? Então não precisa.',
-    '{i:target} Compra por impulso tem remédio: esperar 24 horas.',
-    'O cacau não cai do pé sozinho, mas o salário também não dura sozinho.',
-    '{i:money} Cada real guardado hoje é um problema a menos amanhã.',
-    '{nome}, um lançamento por dia mantém o caos longe.',
-    '{i:sprout} Pequenos gastos evitados viram grandes economias.',
-    'Já olhou seus orçamentos hoje? Eles sentem sua falta.',
+    '{i:bulb} Em dúvida se precisa comprar algo? Então não precisa',
+    '{i:target} Compra por impulso tem remédio: esperar 24 horas',
+    'O cacau não cai do pé sozinho, mas o salário também não dura sozinho',
+    '{i:money} Cada real guardado hoje é um problema a menos amanhã',
+    '{nome}, um lançamento por dia mantém o caos longe',
+    '{i:sprout} Pequenos gastos evitados viram grandes economias',
+    'Já olhou seus orçamentos hoje? Eles sentem sua falta',
     '{i:flame} Constância é o segredo: continue aparecendo por aqui!',
     'Anotar é o primeiro passo pra economizar. Bora lançar?',
     '{i:target} Qual é a sua meta de economia deste mês? Tá perto?',
-    '{i:tree} {nome}, seu cacau agradece cada dia que você passa por aqui.',
-    'Gastar com consciência não é só gastar menos, é gastar melhor.',
-    '{i:bulb} Dica: confira a aba Planejamento. Dá pra descobrir pra onde o dinheiro vai.',
+    '{i:tree} {nome}, seu cacau agradece cada dia que você passa por aqui',
+    'Gastar com consciência não é só gastar menos, é gastar melhor',
+    '{i:bulb} Dica: confira a aba Planejamento. Dá pra descobrir pra onde o dinheiro vai',
     'Hoje você já resistiu a alguma compra por impulso? Aplauso pra você!',
-    '{i:cacao} Quem cuida do dinheiro colhe cacau o ano todo.',
+    '{i:cacao} Quem cuida do dinheiro colhe cacau o ano todo',
     '{nome}, tem algum gasto de ontem ainda sem lançar?',
-    'O melhor momento pra economizar era ontem; o segundo melhor é agora.',
+    'O melhor momento pra economizar era ontem; o segundo melhor é agora',
     '{i:chart} Você está construindo um hábito. Continue!',
     'Antes de comprar, pergunta: vale o preço ou só o desejo?',
-    '{i:sparkles} Saldo organizado, cabeça leve.',
+    '{i:sparkles} Saldo organizado, cabeça leve',
     '{nome}, que tal dar uma olhada nos reembolsos pendentes?',
-    'Cada vez que você volta aqui, o controle fica mais fácil.',
-    '{i:trophy} Economizar é um jogo longo, e você está jogando bem.'
+    'Cada vez que você volta aqui, o controle fica mais fácil',
+    '{i:trophy} Economizar é um jogo longo, e você está jogando bem'
   ];
   function homeGreetingBand_(hour) {
     if (hour < 6) return 'night';
