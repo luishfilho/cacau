@@ -1018,7 +1018,7 @@
     z-index: 220; display: flex; align-items: flex-end; justify-content: center; background: rgba(0,0,0,.4);
   }
   .dd-sheet {
-    width: 100%; max-width: 720px; max-height: calc(100% - 24px); display: flex; flex-direction: column;
+    width: 100%; max-width: 720px; max-height: 50%; display: flex; flex-direction: column;
     background: var(--surface); border-radius: 18px 18px 0 0; padding: 0 12px calc(12px + env(safe-area-inset-bottom, 0px));
     box-shadow: 0 -8px 30px rgba(0,0,0,.25); overscroll-behavior: contain;
   }
@@ -1366,7 +1366,10 @@
   /* Meta diária, por célula: UMA linha pontilhada (o teto da semana) por cima das barras, na cor do veredito da semana; a
      célula do domingo tem o respiro de 8px, então a linha quebra naturalmente entre uma semana e outra. */
   .day-bar-target { position: absolute; left: 0; right: 0; height: 0; pointer-events: none; z-index: 2; }
-  .day-bar-target-week { border-top: 2px dotted var(--text-muted); z-index: 3; }
+  .tx-future-toggle { text-align: center; margin: -4px 0 10px; }
+  .tx-future-btn { background: none; border: none; padding: 6px 10px; font-size: 13px; color: var(--text-muted); cursor: pointer; min-height: 0; width: auto; }
+  .tx-future-btn strong { color: var(--primary); }
+  .day-bar-target-week { border-top: 4px dotted var(--text-muted); z-index: 3; } /* pontilhado grosso */
   /* Veredito da semana (ver dayBarsTargetStatus_): cor da linha. */
   .day-bar-target-ok { border-top-color: var(--income); }
   .day-bar-target-warn { border-top-color: var(--warning); }
@@ -2123,7 +2126,7 @@
 
   <script>var FINANCAS_MULTIUSER = true;</script>
   <script src="https://accounts.google.com/gsi/client" async defer></script>
-  <script src="cacau-web.js?v=9b82302959"></script>
+  <script src="cacau-web.js?v=14f720c012"></script>
 <script>
   var STATE = {
     accounts: [],
@@ -2141,6 +2144,7 @@
     currentView: 'dashboard',
     txFilters: {},
     txFiltersExpanded: false, // card "Filtrar lançamentos" do Extrato começa fechado; fica aberto entre re-renders até o usuário fechar de novo
+    showFutureInstallments: false, // Extrato/Resumo/recentes escondem parcelas com data futura; o botão do Extrato liga (ver hidesFutureInstallments_)
     txVisibleCount: 50, // quantos lançamentos (não cards) o Extrato renderiza antes de "Carregar mais" — ver TX_PAGE_SIZE
     txCalendarExpanded: true, // card do calendário do Extrato começa aberto (diferente do de filtro) -- é o conteúdo mais visual da tela
     txCalendarMode: 'expense', // o que as barras do Resumo somam por dia: 'expense' | 'income'
@@ -5696,7 +5700,7 @@
       return '<h3>' + accountNameHtml(cc.accountId) + '</h3>' + rows;
     }).join('');
 
-    var recentTransactions = d.recentTransactions.filter(function (t) { return STATE.deletingIds.indexOf(t.id) === -1; });
+    var recentTransactions = d.recentTransactions.filter(function (t) { return STATE.deletingIds.indexOf(t.id) === -1 && !isFutureInstallment_(t); });
     var recentHtml = recentTransactions.map(txRowHtml).join('') || '<div class="empty-state">Sem lançamentos ainda.</div>';
 
     var budgetTimelineHtml = buildBudgetTimelineHtml(d);
@@ -7187,6 +7191,7 @@
         '</div>' +
       '</div>' +
       buildTxCalendarHtml_('extrato') +
+      '<div id="tx-future-toggle" class="tx-future-toggle" hidden></div>' +
       '<div id="tx-list"><div class="empty-state">Carregando…</div></div>';
 
     document.getElementById('tx-filters-header').onclick = function () {
@@ -7348,11 +7353,46 @@
    *  um dia cai), pra não recalcular esse filtro 3 vezes com pequenas variações. */
   /** O Resumo do Início nunca usa os filtros do Extrato (não tem como o usuário ver/limpar esses filtros ali). */
   function calFilters_() { return txCalendarScope_ === 'home' ? {} : STATE.txFilters; }
-  function currentFilteredTransactionsCombined_() {
+  /** Parcela cuja data efetiva (compra + i-1 meses) ainda não chegou. */
+  function isFutureInstallment_(t) { return !!t.installmentGroupId && !!t.date && t.date > todayYmd(); }
+  /** Extrato, Resumo e lançamentos recentes olham de hoje pra trás: parcelas futuras ficam ocultas, a menos que a pessoa peça
+   *  (STATE.showFutureInstallments, botão no Extrato) ou o filtro já fale de datas (De/Até) ou de um recorte do ciclo -- aí a
+   *  lista precisa bater com o que foi pedido. Os orçamentos, o ciclo e a Projeção seguem contando as parcelas futuras. */
+  function hidesFutureInstallments_(filters) {
+    return !STATE.showFutureInstallments && !filters.dateFrom && !filters.dateTo && !filters.cycleLabels && !filters.useEffectiveDate;
+  }
+  /** keepFuture = true devolve também as parcelas futuras (pra contar quantas estão ocultas). */
+  function currentFilteredTransactionsCombined_(keepFuture) {
     var filters = calFilters_();
-    var pending = STATE.pendingTransactions.filter(function (t) { return txMatchesFilters(t, filters); });
-    var txs = STATE.allTransactions.filter(function (t) { return txMatchesFilters(t, filters); });
+    var hide = !keepFuture && hidesFutureInstallments_(filters);
+    function keep(t) { return txMatchesFilters(t, filters) && !(hide && isFutureInstallment_(t)); }
+    var pending = STATE.pendingTransactions.filter(keep);
+    var txs = STATE.allTransactions.filter(keep);
     return pending.concat(txs).filter(function (t) { return STATE.deletingIds.indexOf(t.id) === -1; });
+  }
+  /** Quantas parcelas futuras o filtro atual está escondendo (0 se o filtro as libera ou não há nenhuma). */
+  function hiddenFutureInstallmentsCount_() {
+    if (!hidesFutureInstallments_(calFilters_())) return 0;
+    return currentFilteredTransactionsCombined_(true).length - currentFilteredTransactionsCombined_().length;
+  }
+  /** Linha acima da lista do Extrato: "N parcelas futuras ocultas · Mostrar" / "Ocultar parcelas futuras". */
+  function renderFutureInstallmentsToggle_() {
+    var host = document.getElementById('tx-future-toggle');
+    if (!host) return;
+    var hidden = hiddenFutureInstallmentsCount_();
+    var shown = !!STATE.showFutureInstallments && currentFilteredTransactionsCombined_().some(isFutureInstallment_);
+    if (!hidden && !shown) { host.hidden = true; host.innerHTML = ''; return; }
+    host.hidden = false;
+    host.innerHTML = '<button type="button" class="tx-future-btn">' + (shown
+      ? 'Ocultar parcelas futuras'
+      : escapeHtml(hidden + (hidden === 1 ? ' parcela futura oculta' : ' parcelas futuras ocultas')) + ' · <strong>Mostrar</strong>') + '</button>';
+    host.querySelector('button').onclick = function () {
+      STATE.showFutureInstallments = !STATE.showFutureInstallments;
+      STATE.txVisibleCount = TX_PAGE_SIZE;
+      STATE.txCalendarScrollLeft = null;
+      loadTxList();
+      renderTxCalendar_();
+    };
   }
 
   function txFiltersActive_(f) {
@@ -8339,6 +8379,7 @@
    */
   function loadTxList() {
     renderTxList(currentFilteredTransactionsCombined_());
+    renderFutureInstallmentsToggle_();
   }
 
   /** Rola até o card do dia clicado no calendário (ver renderTxCalendar_). Se esse dia
@@ -8815,6 +8856,10 @@
       if (eff2) spentByDay[eff2] = (spentByDay[eff2] || 0) + netAmountOfPassiveForBudget_(t);
     });
     var lines = dayBarsTargetLines_(days, monthLimit, spentByDay, todayYmd());
+    // A linha do Resumo fica na MESMA altura toda semana (pedido): o teto diário do mês (teto ÷ dias), em vez do "o que
+    // sobra" que subia e descia a cada semana. O veredito colorido de cada semana é julgado contra esse mesmo teto.
+    // (O "o que sobra" adaptativo continua nos avisos dos orçamentos.)
+    lines.week = lines.month;
     lines.spent = spentByDay; // pra dayBarsTargetStatus_ julgar na mesma base da meta
     return lines;
   }
@@ -11373,7 +11418,7 @@
    * Texto de aviso do orçamento (sempre visível na barra, ver buildBudgetTimelineHtml/
    * budgetAdvisoryHtml_) pro intervalo [fromYmd, toYmd] -- o CICLO atual, ou o mês atual
    * escolhido no seletor. "Dentro"/"Próximo" do limite (progress.status 'ok'/'atencao'):
-   * "Gastar no máximo R$ X essa semana / R$ Y por dia" (ou "... R$ Y hoje" no último dia da
+   * "Gastar até R$ X esta semana • R$ Y/dia" (ou "... R$ Y hoje" no último dia da
    * semana/do ciclo), com o RESTANTE = 95% do limite − gasto (o teto de economia, se há
    * plano de recuperação, já vem em progress.limit) dividido pelos dias que restam: Y = restante ÷ dias
    * que faltam no ciclo, X = Y × dias que faltam na semana (limitada ao ciclo); sempre sem centavos,
@@ -11382,7 +11427,7 @@
    * acima do limite: "Evitar gastos". Um ciclo não "libera espaço" aos poucos (como a
    * janela móvel antiga liberava): reseta de uma vez quando vira. untilYmd (opcional):
    * o fim do ciclo, na visão "Ciclo atual" (cada barra tem o seu); sem ele (visão de um mês)
-   * sai só "Gastar no máximo R$ X" -- a barra toda já é o mês. excludeFlagged
+   * sai só "Gastar até R$ X" -- a barra toda já é o mês. excludeFlagged
    * (opcional): os orçamentos passam true -- ignoram lançamentos fora das análises ao
    * decidir o texto também, não só a barra em si. Vinculados a um recorrente são sempre
    * ignorados (ver spentForBudgetInRange_).
@@ -11392,7 +11437,7 @@
     if (progress.status === 'ok') {
       var remainingToWarning = progress.limit * BUDGET_WARNING_RATIO_ - progress.spent;
       if (!shouldAvoidInsteadOfCap_(remainingToWarning, b.categoryIds, fromYmd, toYmd, excludeFlagged)) {
-        if (!untilYmd) return 'Gastar no máximo ' + fmtMoneyNoCents_(remainingToWarning);
+        if (!untilYmd) return 'Gastar até ' + fmtMoneyNoCents_(remainingToWarning);
         // O que SOBRA do teto dividido pelos dias que SOBRAM no ciclo (não uma média fixa: gastou menos, o dia rende
         // mais; gastou mais, rende menos -- e com plano de recuperação o teto já vem reduzido em progress.limit).
         // "Essa semana" = o resto da semana de calendário (domingo a sábado) até o fim do ciclo, o que vier primeiro.
@@ -11403,20 +11448,20 @@
         var perDay = Math.max(0, remainingToWarning) / daysLeft;
         var perDayWhole = Math.floor(perDay + 1e-9);
         var weekWhole = Math.floor(perDay * weekDaysLeft + 1e-9);
-        if (weekDaysLeft <= 1 && perDayWhole >= 1) return 'Gastar no máximo ' + fmtMoneyNoCents_(perDayWhole) + ' hoje';
+        if (weekDaysLeft <= 1 && perDayWhole >= 1) return 'Gastar até ' + fmtMoneyNoCents_(perDayWhole) + ' hoje';
         if (weekWhole >= 1 && weekDaysLeft > 1) {
-          return 'Gastar no máximo ' + fmtMoneyNoCents_(weekWhole) + ' essa semana' + (perDayWhole >= 1 ? ' / ' + fmtMoneyNoCents_(perDayWhole) + ' por dia' : '');
+          return 'Gastar até ' + fmtMoneyNoCents_(weekWhole) + ' esta semana' + (perDayWhole >= 1 ? ' • ' + fmtMoneyNoCents_(perDayWhole) + '/dia' : '');
         }
       }
     }
     return 'Evitar gastos' + (untilText ? ' até ' + untilText : '');
   }
-  /** Envolve o início do texto (sempre "Gastar no máximo" ou "Evitar gastos") num
+  /** Envolve o início do texto (sempre "Gastar até" ou "Evitar gastos") num
    *  <strong> -- pedido explícito do usuário, pra destacar essas duas frases agora que
    *  o texto passou a ficar sempre visível (não mais escondido atrás de hover num
    *  tooltip). "Sem lançamentos ainda" (só na versão rolante) não bate com nenhum dos
    *  dois, então sai sem negrito nenhum. */
-  var BUDGET_ADVISORY_LEAD_INS_ = ['Gastar no máximo', 'Evitar gastos'];
+  var BUDGET_ADVISORY_LEAD_INS_ = ['Gastar até', 'Evitar gastos'];
   function budgetAdvisoryHtml_(text) {
     for (var i = 0; i < BUDGET_ADVISORY_LEAD_INS_.length; i++) {
       var leadIn = BUDGET_ADVISORY_LEAD_INS_[i];

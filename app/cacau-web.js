@@ -2080,7 +2080,9 @@ function getDashboardData(allTransactions) {
   var totalIncomeMonth = monthTxs.reduce(function (sum, t) { return t.Kind === 'income' ? sum + Number(t.Amount) : sum; }, 0);
   var totalExpenseMonth = monthTxs.reduce(function (sum, t) { return t.Kind === 'expense' ? sum + Number(t.Amount) : sum; }, 0);
 
-  var recentTransactions = listTransactions({}, allTxs).slice(0, 15);
+  // Os lançamentos recentes olham de hoje pra trás: parcela cuja data efetiva ainda não chegou fica de fora.
+  var today = todayYmd_();
+  var recentTransactions = listTransactions({}, allTxs).filter(function (t) { return !(t.installmentGroupId && t.date > today); }).slice(0, 15);
 
   var creditCardSummaries = accounts
     .filter(function (a) { return a.type === 'credit_card'; })
