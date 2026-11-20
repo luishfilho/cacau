@@ -1906,6 +1906,29 @@
   }
   .dropdown-option:hover, .dropdown-option.kb-active { background: var(--bg); }
   .dropdown-option.active { background: var(--primary); color: var(--primary-contrast); }
+  /* Escolha múltipla (ver openDropdownMenu_ com multi): caixinha à esquerda, marcada nas opções escolhidas. */
+  .dropdown-option-multi { display: flex; align-items: center; gap: 8px; }
+  .dd-multi-box { flex: none; width: 14px; height: 14px; border-radius: 4px; border: 1.5px solid var(--text-muted); box-sizing: border-box; position: relative; }
+  .dropdown-option.active .dd-multi-box { border-color: currentColor; }
+  .dropdown-option.active .dd-multi-box::after { content: ''; position: absolute; left: 3px; top: 0; width: 4px; height: 8px; border: solid currentColor; border-width: 0 2px 2px 0; transform: rotate(45deg); }
+
+  /* Gráfico de colunas das próximas faturas (card "Próximas faturas" do Início): coluna empilhada por cartão. */
+  .bills-chart-head { display: flex; justify-content: space-between; align-items: center; gap: 8px; flex-wrap: wrap; margin-bottom: 10px; }
+  .bills-chart-head h2 { margin-bottom: 0; }
+  .bills-chart { display: flex; align-items: stretch; gap: 6px; overflow-x: auto; padding-bottom: 2px; }
+  .bills-col { flex: 1 0 44px; min-width: 44px; display: flex; flex-direction: column; align-items: stretch; cursor: default; -webkit-user-select: none; user-select: none; }
+  .bills-col-val { height: 16px; font-size: 11px; font-weight: 600; text-align: center; white-space: nowrap; color: var(--text-muted); }
+  .bills-col-plot { height: 140px; display: flex; align-items: flex-end; justify-content: center; border-bottom: 1px solid var(--border); }
+  .bills-stack { width: 70%; max-width: 38px; display: flex; flex-direction: column; border-radius: 6px 6px 0 0; overflow: hidden; }
+  .bills-seg { background: var(--acc-color-light, var(--primary)); min-height: 2px; }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) .bills-seg { background: var(--acc-color-dark, var(--primary)); }
+  }
+  :root[data-theme="dark"] .bills-seg { background: var(--acc-color-dark, var(--primary)); }
+  .bills-seg + .bills-seg { border-top: 1px solid var(--card); }
+  .bills-col-label { font-size: 11px; text-align: center; color: var(--text-muted); padding-top: 4px; text-transform: lowercase; }
+  .bills-col:hover .bills-stack { filter: brightness(1.08); }
+  .bills-col-before .bills-stack { opacity: .75; }
 
   /* Grade de ícones do seletor de categoria (ver openCategoryIconPicker_, JavaScript.html) --
      cada botão é só o ícone, centralizado, sem o visual de botão padrão do app. */
@@ -2100,7 +2123,7 @@
 
   <script>var FINANCAS_MULTIUSER = true;</script>
   <script src="https://accounts.google.com/gsi/client" async defer></script>
-  <script src="cacau-web.js?v=d8d23cdd98"></script>
+  <script src="cacau-web.js?v=9b82302959"></script>
 <script>
   var STATE = {
     accounts: [],
@@ -2155,7 +2178,7 @@
     var label = escapeHtml(ACCOUNT_TYPE_LABELS[type] || '');
     return '<svg class="acc-type-ico" viewBox="0 0 24 24" role="img" aria-label="' + label + '" data-tooltip="' + label + '">' + path + '</svg>';
   }
-  var STATUS_LABELS = { aberta: 'Aberta', fechada: 'Fechada', paga: 'Paga', atrasada: 'Atrasada' };
+  var STATUS_LABELS = { aberta: 'Aberta', fechada: 'Fechada', futura: 'Futura', paga: 'Paga', atrasada: 'Atrasada' };
   var TX_PAGE_SIZE = 50; // ver STATE.txVisibleCount / "Carregar mais" no Extrato
 
   // Chamadas que criam lançamento: contam como "dia com lançamento" no cacaueiro (ver treeNoteEntry_).
@@ -3203,15 +3226,18 @@
   // seguida chamaria openDropdownMenu_ de novo -- esse marcador (válido só até o click
   // terminar, ou 1,5 s) faz essa chamada ser ignorada.
   var dropdownClosedByAnchor_ = null;
-  function openDropdownMenu_(anchorEl, options, onSelect) {
+  // multi (opcional): escolha MÚLTIPLA -- cada clique liga/desliga a opção (o menu fica aberto, com uma caixinha marcada nas
+  // escolhidas) e onSelect recebe o array de valores marcados; sempre sobra pelo menos uma marcada.
+  function openDropdownMenu_(anchorEl, options, onSelect, multi) {
     if (dropdownClosedByAnchor_ === anchorEl) { dropdownClosedByAnchor_ = null; return; }
     closeActiveConfirmPopover_();
-    if (isMobileLayout_()) { openDropdownSheet_(anchorEl, options, onSelect); return; }
+    if (isMobileLayout_()) { openDropdownSheet_(anchorEl, options, onSelect, multi); return; }
     var pop = document.createElement('div');
     pop.id = 'confirm-popover';
     pop.className = 'confirm-popover dropdown-popover';
     pop.innerHTML = options.map(function (opt) {
-      return '<div class="dropdown-option' + (opt.selected ? ' active' : '') + '" data-value="' + escapeHtml(opt.value) + '">' + escapeHtml(opt.label) + '</div>';
+      return '<div class="dropdown-option' + (multi ? ' dropdown-option-multi' : '') + (opt.selected ? ' active' : '') + '" data-value="' + escapeHtml(opt.value) + '">' +
+        (multi ? '<span class="dd-multi-box" aria-hidden="true"></span>' : '') + escapeHtml(opt.label) + '</div>';
     }).join('');
     positionPopover(anchorEl, pop);
     // Botão de dropdown: sem afundar/esticar; a setinha gira enquanto o menu está aberto e o menu abre com animação
@@ -3253,8 +3279,27 @@
     document.addEventListener('keydown', onKey, true);
     activeConfirmPopoverCleanup_ = cleanup;
     pop.querySelectorAll('.dropdown-option').forEach(function (el) {
-      el.onclick = function () { cleanup(); onSelect(el.dataset.value); };
+      el.onclick = function () {
+        if (multi) {
+          if (!toggleMultiOption_(options, el.dataset.value)) return;
+          el.classList.toggle('active');
+          onSelect(selectedMultiValues_(options));
+          return;
+        }
+        cleanup(); onSelect(el.dataset.value);
+      };
     });
+  }
+  /** Liga/desliga a opção `value` de uma lista de escolha múltipla; false (e nada muda) se ia desmarcar a última. */
+  function toggleMultiOption_(options, value) {
+    var opt = options.filter(function (o) { return o.value === value; })[0];
+    if (!opt) return false;
+    if (opt.selected && selectedMultiValues_(options).length <= 1) return false;
+    opt.selected = !opt.selected;
+    return true;
+  }
+  function selectedMultiValues_(options) {
+    return options.filter(function (o) { return o.selected; }).map(function (o) { return o.value; });
   }
 
   /**
@@ -3263,7 +3308,7 @@
    * pra baixo ou com Esc/voltar. Mesmo contrato de openDropdownMenu_: options [{ value, label, selected }].
    */
   var DD_SHEET_SEARCH_MIN_ = 8;
-  function openDropdownSheet_(anchorEl, options, onSelect) {
+  function openDropdownSheet_(anchorEl, options, onSelect, multi) {
     var rootEl = document.createElement('div');
     rootEl.id = 'dd-sheet-backdrop';
     rootEl.className = 'dd-sheet-backdrop' + (motionOk_ ? ' dd-sheet-bd-in' : '');
@@ -3296,7 +3341,17 @@
           (opt.selected ? '<svg class="dd-sheet-check" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg>' : '') + '</div>';
       }).join('') : '<div class="dd-sheet-empty">Nada encontrado</div>';
       Array.prototype.forEach.call(list.querySelectorAll('.dd-sheet-option'), function (el) {
-        el.onclick = function () { close_(); onSelect(el.dataset.value); };
+        el.onclick = function () {
+          if (multi) {
+            if (!toggleMultiOption_(options, el.dataset.value)) return;
+            var keep = list.scrollTop;
+            renderList_(search ? search.value : '');
+            list.scrollTop = keep;
+            onSelect(selectedMultiValues_(options));
+            return;
+          }
+          close_(); onSelect(el.dataset.value);
+        };
       });
     }
     function cleanup_() {
@@ -5115,15 +5170,32 @@
   }
 
   // ---------- dashboard ----------
-  /** Resumo do cabeçalho do card "Contas" do Início: Dinheiro (contas que não são cartão), Crédito (limite restante dos
-   *  cartões -- o saldo de um cartão começa no LIMITE, cada compra reduz e cada pagamento de fatura devolve) e Total (a soma). */
-  function accountsSummary_(accounts) {
+  /** Resumo do cabeçalho do card "Contas" do Início: Dinheiro (contas que não são cartão), Faturas (a DÍVIDA em aberto dos
+   *  cartões, de todas as faturas, parcelas futuras incluídas) e Total (Dinheiro menos Faturas). O limite restante dos
+   *  cartões NÃO é dinheiro e não entra na conta -- continua visível em cada cartão da lista. cardDebt vem de cardDebtAsOfYmd_. */
+  function accountsSummary_(accounts, cardDebt) {
     var cash = 0, credit = 0, cards = 0;
     accounts.forEach(function (a) {
       if (a.type === 'investment') return;
       if (a.type === 'credit_card') { credit += a.balance; cards++; } else cash += a.balance;
     });
-    return { cash: cash, credit: credit, total: cash + credit, hasCards: cards > 0 };
+    var debt = Number(cardDebt) || 0;
+    return { cash: cash, credit: credit, debt: debt, total: cash - debt, hasCards: cards > 0 };
+  }
+  /** Dívida em aberto dos cartões em `ymd`: compras (pela data GRAVADA -- o limite some inteiro na compra, parcelas
+   *  futuras incluídas) menos pagamentos de fatura (transferências pro cartão) até o dia; nunca negativa por cartão. Não
+   *  conta ajustes de saldo (consolidação do limite). */
+  function cardDebtAsOfYmd_(ymd) {
+    var byCard = {};
+    STATE.accounts.forEach(function (a) { if (a.type === 'credit_card') byCard[a.id] = 0; });
+    STATE.allTransactions.forEach(function (t) {
+      if (byCard[t.accountId] === undefined || t.balanceAnchor) return;
+      var d = t.purchaseDate || t.date;
+      if (!d || d > ymd) return;
+      if (t.kind === 'expense') byCard[t.accountId] += t.amount;
+      else if (t.kind === 'transfer_in') byCard[t.accountId] -= t.amount;
+    });
+    return Object.keys(byCard).reduce(function (sum, id) { return sum + Math.max(0, byCard[id]); }, 0);
   }
   /** Ordem das contas no card Contas do Início: não-cartões antes dos cartões de crédito; dentro de cada grupo, saldo decrescente
    *  (empate = ordem original, o sort é estável). Não mexe na lista original. */
@@ -5135,12 +5207,12 @@
       return x.i - y.i;
     }).map(function (o) { return o.a; });
   }
-  function accountsSummaryHtml_(accounts) {
-    var sm = accountsSummary_(accounts);
+  function accountsSummaryHtml_(accounts, cardDebt) {
+    var sm = accountsSummary_(accounts, cardDebt);
     function part(label, value) {
       return '<span class="accounts-sum-part"><span class="muted">' + label + '</span> <span>' + escapeHtml(fmtMoney(value)) + '</span></span>';
     }
-    return '<div class="accounts-sum">' + (sm.hasCards ? part('Dinheiro', sm.cash) + part('Crédito', sm.credit) : '') + part('Total', sm.total) + '</div>';
+    return '<div class="accounts-sum">' + (sm.hasCards ? part('Dinheiro', sm.cash) + part('Faturas', -sm.debt) : '') + part('Total', sm.total) + '</div>';
   }
 
   // ---------- mensagens do Início (saudação ao abrir o app; engajamento a cada volta à aba) ----------
@@ -5326,6 +5398,122 @@
     return html;
   }
 
+  // ---------- gráfico de colunas das próximas faturas dos cartões (card do Início) ----------
+  var BILLS_CHART_CARDS_KEY_ = 'financas-bills-chart-cards'; // por aparelho, como o tema e os cards do Início
+  var BILLS_CHART_MAX_MONTHS_ = 12;
+  /** Cartões marcados no gráfico (ids). Sem escolha guardada -- ou se nenhum dos guardados existe mais -- são todos. */
+  function billsChartSelectedIds_(summaries) {
+    var all = summaries.map(function (c) { return c.accountId; });
+    var stored = STATE.billsChartCards;
+    if (stored === undefined) {
+      try { stored = JSON.parse(localStorage.getItem(BILLS_CHART_CARDS_KEY_)); } catch (e) { stored = null; }
+    }
+    if (!Array.isArray(stored)) return all;
+    var valid = stored.filter(function (id) { return all.indexOf(id) !== -1; });
+    return valid.length ? valid : all;
+  }
+  function billsChartSelectionSave_(ids) {
+    STATE.billsChartCards = ids;
+    try { localStorage.setItem(BILLS_CHART_CARDS_KEY_, JSON.stringify(ids)); } catch (e) { /* sem armazenamento: vale só até recarregar */ }
+  }
+  /** Colunas do gráfico: uma por mês de fatura ainda NÃO paga (valor = o que falta pagar), do mês da fatura aberta em diante
+   *  (meses sem fatura no meio viram coluna vazia, pro eixo ser contínuo); faturas fechadas/atrasadas de antes somem numa
+   *  primeira coluna "anteriores". Cada coluna leva as partes por cartão (parts), pro empilhado e o tooltip. */
+  function upcomingBillsSeries_(summaries, selectedIds) {
+    var byMonth = {}, before = { billMonth: 'before', total: 0, parts: [] };
+    summaries.forEach(function (cc) {
+      if (selectedIds.indexOf(cc.accountId) === -1) return;
+      var beforeOfCard = 0;
+      (cc.bills || []).forEach(function (b) {
+        if (b.status === 'paga' || !(b.remaining > 0)) return;
+        if (b.status === 'fechada' || b.status === 'atrasada') { beforeOfCard += b.remaining; return; }
+        var m = byMonth[b.billMonth] || (byMonth[b.billMonth] = { billMonth: b.billMonth, total: 0, parts: [] });
+        m.total += b.remaining;
+        m.parts.push({ accountId: cc.accountId, amount: b.remaining, status: b.status, dueDate: b.dueDate });
+      });
+      if (beforeOfCard > 0) { before.total += beforeOfCard; before.parts.push({ accountId: cc.accountId, amount: beforeOfCard, status: 'atrasada' }); }
+    });
+    var keys = Object.keys(byMonth).sort(), out = [];
+    if (before.total > 0) out.push(before);
+    if (keys.length) {
+      var cur = keys[0], last = keys[keys.length - 1], n = 0;
+      while (cur <= last && n < BILLS_CHART_MAX_MONTHS_) {
+        out.push(byMonth[cur] || { billMonth: cur, total: 0, parts: [] });
+        cur = shiftYm_(cur, 1); n++;
+      }
+    }
+    out.forEach(function (m) {
+      m.total = roundCents_(m.total);
+      m.parts.forEach(function (p) { p.amount = roundCents_(p.amount); });
+    });
+    return out;
+  }
+  /** Rótulo curto da coluna: "nov", ou "jan/27" quando o ano muda (ou já é outro ano que o atual). */
+  function billsChartMonthLabel_(ym, thisYear) {
+    if (ym === 'before') return 'antes';
+    var p = ym.split('-'), name = MONTH_NAMES_PT[Number(p[1]) - 1].slice(0, 3);
+    return (Number(p[0]) !== thisYear || p[1] === '01') ? name + '/' + p[0].slice(2) : name;
+  }
+  function billsChartAccountStyle_(accountId) {
+    var a = STATE.accounts.find(function (x) { return x.id === accountId; });
+    var c = a && ACCOUNT_COLOR_PALETTE_[a.colorIndex];
+    return c ? '--acc-color-light:' + c.light + ';--acc-color-dark:' + c.dark : '';
+  }
+  function billsChartAccountName_(accountId) {
+    var a = STATE.accounts.find(function (x) { return x.id === accountId; });
+    return a ? a.name : 'Cartão';
+  }
+  function billsChartColumnTip_(m) {
+    var title = m.billMonth === 'before' ? 'Faturas anteriores em aberto' : fmtMonthYear(m.billMonth);
+    var plain = [title].concat(m.parts.map(function (p) { return billsChartAccountName_(p.accountId) + ' ' + fmtMoney(p.amount); }));
+    if (m.parts.length > 1) plain.push('Total ' + fmtMoney(m.total));
+    var rich = '<div class="tt-date">' + escapeHtml(title) + '</div>' + (m.parts.length ? m.parts.map(function (p) {
+      var st = (m.billMonth !== 'before' && STATUS_LABELS[p.status]) ? ' <span class="muted">· ' + escapeHtml(STATUS_LABELS[p.status]) + '</span>' : '';
+      return '<div class="tt-row"><span>' + accountNameHtml(p.accountId) + st + '</span><span class="tt-val">' + escapeHtml(fmtMoney(p.amount)) + '</span></div>';
+    }).join('') : '<div class="tt-row"><span>Sem fatura</span></div>') +
+      (m.parts.length > 1 ? '<div class="tt-gap"></div><div class="tt-row"><span>Total</span><span class="tt-val">' + escapeHtml(fmtMoney(m.total)) + '</span></div>' : '');
+    return { plain: plain.join('\n'), rich: rich };
+  }
+  function billsChartPlotHtml_(series) {
+    var max = series.reduce(function (m, c) { return Math.max(m, c.total); }, 0);
+    var thisYear = new Date().getFullYear();
+    return '<div class="bills-chart" role="img" aria-label="Próximas faturas dos cartões">' + series.map(function (m) {
+      var tip = billsChartColumnTip_(m);
+      var segs = m.parts.slice().sort(function (a, b) { return b.amount - a.amount; }).map(function (p) {
+        return '<div class="bills-seg" style="height:' + (m.total > 0 ? (p.amount / m.total * 100).toFixed(2) : 0) + '%;' + billsChartAccountStyle_(p.accountId) + '"></div>';
+      }).join('');
+      var h = max > 0 ? Math.max(m.total > 0 ? 3 : 0, m.total / max * 100) : 0;
+      return '<div class="bills-col' + (m.billMonth === 'before' ? ' bills-col-before' : '') + '" data-tooltip="' + escapeHtml(tip.plain) + '" data-tooltip-html="' + escapeHtml(tip.rich) + '">' +
+        '<div class="bills-col-val">' + (m.total > 0 ? escapeHtml(fmtMoneyNoCents_(m.total)) : '') + '</div>' +
+        '<div class="bills-col-plot"><div class="bills-stack" style="height:' + h.toFixed(1) + '%">' + segs + '</div></div>' +
+        '<div class="bills-col-label">' + escapeHtml(billsChartMonthLabel_(m.billMonth, thisYear)) + '</div></div>';
+    }).join('') + '</div>';
+  }
+  function billsChartCardHtml_(summaries) {
+    if (!summaries || !summaries.length) return '';
+    var selected = billsChartSelectedIds_(summaries);
+    var series = upcomingBillsSeries_(summaries, selected);
+    var label = selected.length === summaries.length ? 'Todos os cartões'
+      : (selected.length === 1 ? billsChartAccountName_(selected[0]) : selected.length + ' cartões');
+    var btn = summaries.length > 1
+      ? '<button type="button" class="capsule dd-btn" id="bills-chart-cards" aria-haspopup="listbox">' + escapeHtml(label) + ' <span class="dd-chev">▾</span></button>' : '';
+    return '<div class="card"><div class="bills-chart-head"><h2>Próximas faturas</h2>' + btn + '</div>' +
+      (series.length ? billsChartPlotHtml_(series) : '<div class="empty-state">Nenhuma fatura em aberto.</div>') + '</div>';
+  }
+  function wireBillsChart_(root) {
+    root.querySelectorAll('.bills-col[data-tooltip]').forEach(function (el) { wireTooltipTrigger_(el); });
+    var btn = document.getElementById('bills-chart-cards');
+    if (!btn) return;
+    btn.onclick = function () {
+      var summaries = (STATE.dashboard && STATE.dashboard.creditCardSummaries) || [];
+      var selected = billsChartSelectedIds_(summaries);
+      var options = summaries.map(function (c) {
+        return { value: c.accountId, label: billsChartAccountName_(c.accountId), selected: selected.indexOf(c.accountId) !== -1 };
+      });
+      openDropdownMenu_(btn, options, function (ids) { billsChartSelectionSave_(ids); render(); }, true);
+    };
+  }
+
   // ---------- cards do Início: quais aparecem e em que ordem ----------
   var HOME_CARDS_ = [
     { id: 'cycle', label: 'Saldo do ciclo' },
@@ -5334,6 +5522,7 @@
     { id: 'summary', label: 'Resumo' },
     { id: 'accounts', label: 'Contas' },
     { id: 'bills', label: 'Faturas de cartão' },
+    { id: 'billsChart', label: 'Próximas faturas' },
     { id: 'categories', label: 'Gastos por categoria' },
     { id: 'recent', label: 'Últimos lançamentos' }
   ];
@@ -5522,8 +5711,9 @@
       trend: function () { return buildBalanceTrendHtml_(); },
       budgets: function () { return budgetTimelineHtml; },
       summary: function () { return buildTxCalendarHtml_('home'); },
-      accounts: function () { return '<div class="card"><h2>Contas</h2>' + accountsSummaryHtml_(d.accounts) + accountsHtml + '</div>'; },
+      accounts: function () { return '<div class="card"><h2>Contas</h2>' + accountsSummaryHtml_(d.accounts, cardDebtAsOfYmd_('9999-12-31')) + accountsHtml + '</div>'; },
       bills: function () { return billsHtml ? '<div class="card"><h2>Faturas de cartão</h2>' + billsHtml + '</div>' : ''; },
+      billsChart: function () { return billsChartCardHtml_(d.creditCardSummaries); },
       categories: function () {
         return '<div class="card">' +
           '<h2>Gastos por categoria (' + fmtMonthYear(d.month) + ')</h2>' +
@@ -5557,6 +5747,7 @@
       openDropdownMenu_(btn, opts, function (v) { STATE.cycleOffset = Number(v) || 0; STATE.cycleAnimate = true; render(); });
     };
     setupBudgetBarMenus_(root);
+    wireBillsChart_(root);
 
     document.querySelectorAll('#view-root [data-tx]').forEach(function (el) {
       el.onclick = function () {
@@ -5974,9 +6165,54 @@
     inputEl.dataset.autoCp = next;
     inputEl.dispatchEvent(new Event('input', { bubbles: true }));
   }
-  function sharesOfPassive_(passiveTxId) {
-    return STATE.refundShares.filter(function (s) { return s.passiveTransactionId === passiveTxId; });
+  /** Compras parceladas, em memória: id de cada parcela -> grupo, e por grupo a parcela âncora (a de menor número, onde
+   *  ficam as partes de reembolso -- ver installmentAnchorRow_, Refunds.js) e o valor total. Reconstruído só quando a lista
+   *  de lançamentos muda (identidade, tamanho ou primeiro id): sharesOfPassive_ roda por linha. */
+  function installmentIndex_() {
+    var list = STATE.allTransactions || [];
+    var first = list.length ? list[0].id : null;
+    var m = installmentIndex_.memo || { list: null, len: -1, first: null, idToGroup: {}, groups: {} };
+    if (m.list === list && m.len === list.length && m.first === first) return m;
+    var idToGroup = {}, groups = {};
+    list.forEach(function (t) {
+      if (!t.installmentGroupId) return;
+      idToGroup[t.id] = t.installmentGroupId;
+      var g = groups[t.installmentGroupId] || (groups[t.installmentGroupId] = { total: 0, anchor: t, ids: [] });
+      g.total += t.amount;
+      g.ids.push(t.id);
+      if ((t.installmentSeq || 0) < (g.anchor.installmentSeq || 0)) g.anchor = t;
+    });
+    installmentIndex_.memo = { list: list, len: list.length, first: first, idToGroup: idToGroup, groups: groups };
+    return installmentIndex_.memo;
   }
+  /** Parcela âncora da compra parcelada a que `tx` pertence (ele mesmo se não for parcelado). */
+  function refundAnchorOf_(tx) {
+    if (!tx || !tx.installmentGroupId) return tx;
+    var g = installmentIndex_().groups[tx.installmentGroupId];
+    return g ? g.anchor : tx;
+  }
+  /** Valor TOTAL de uma compra parcelada (soma das parcelas em memória) -- o próprio valor numa despesa comum. */
+  function purchaseTotalOf_(tx) {
+    if (!tx || !tx.installmentGroupId) return tx ? tx.amount : 0;
+    var g = installmentIndex_().groups[tx.installmentGroupId];
+    return g ? g.total : tx.amount;
+  }
+  /** Partes de reembolso de uma despesa. Numa compra parcelada as partes são da COMPRA, então qualquer parcela enxerga as
+   *  do grupo inteiro (penduradas na âncora). */
+  function sharesOfPassive_(passiveTxId) {
+    var idx = installmentIndex_();
+    var gid = idx.idToGroup[passiveTxId];
+    if (!gid) return STATE.refundShares.filter(function (s) { return s.passiveTransactionId === passiveTxId; });
+    return STATE.refundShares.filter(function (s) {
+      return s.passiveTransactionId === passiveTxId || idx.idToGroup[s.passiveTransactionId] === gid;
+    });
+  }
+  /** Fração da compra já coberta por reembolso (0..1), a aplicar no valor de CADA parcela. */
+  function installmentRefundShare_(tx, coveredAmount) {
+    var total = purchaseTotalOf_(tx);
+    return total > 0 ? Math.min(1, Math.max(0, coveredAmount / total)) : 0;
+  }
+  function roundCents_(v) { return Math.round(v * 100) / 100; }
   function linksOfShare_(shareId) {
     return STATE.refundLinks.filter(function (l) { return l.shareId === shareId; });
   }
@@ -5996,6 +6232,7 @@
     var shares = sharesOfPassive_(tx.id);
     if (!shares.length) return tx.amount;
     var allocated = shares.reduce(function (sum, s) { return sum + allocatedForShare_(s.id); }, 0);
+    if (tx.installmentGroupId) return roundCents_(tx.amount * (1 - installmentRefundShare_(tx, allocated)));
     return tx.amount - allocated;
   }
   /** Valor líquido de uma despesa passiva PRA ORÇAMENTO -- diferente de
@@ -6014,6 +6251,7 @@
     if (!shares.length) return tx.amount;
     var allocated = shares.reduce(function (sum, s) { return sum + allocatedForShare_(s.id); }, 0);
     var expected = shares.reduce(function (sum, s) { return sum + s.expectedAmount; }, 0);
+    if (tx.installmentGroupId) return roundCents_(tx.amount * (1 - installmentRefundShare_(tx, Math.max(allocated, expected))));
     return tx.amount - Math.max(allocated, expected);
   }
   function linksOfActive_(activeTxId) {
@@ -7162,9 +7400,14 @@
     // NEUTRA (var(--text), não --income/--expense) de propósito: não é dinheiro já
     // ganho nem gasto ainda, só uma expectativa de recebimento.
     var pendingRefund = 0;
+    var countedShares = {}; // compra parcelada: cada parcela enxerga as MESMAS partes, que só valem uma vez
     combined.forEach(function (t) {
       if (t.kind !== 'expense') return;
-      sharesOfPassive_(t.id).forEach(function (s) { pendingRefund += remainingForShare_(s); });
+      sharesOfPassive_(t.id).forEach(function (s) {
+        if (countedShares[s.id]) return;
+        countedShares[s.id] = true;
+        pendingRefund += remainingForShare_(s);
+      });
     });
     var refundHtml = pendingRefund >= 0.01
       ? sep + '<span style="color:var(--text)">' + escapeHtml(fmtMoneyNoCents_(pendingRefund)) + '</span> a receber de reembolsos'
@@ -7298,6 +7541,37 @@
   function applyOptimisticTxEdit_(target, payload) {
     OPTIMISTIC_TX_EDIT_KEYS_.forEach(function (k) {
       if (payload[k] !== undefined) target[k] = payload[k];
+    });
+  }
+  /** Soma meses a 'YYYY-MM-DD' mantendo o dia (cai no último dia do mês se ele for mais curto) -- espelho de
+   *  addMonthsToYmd_ (Transactions.js). */
+  function addMonthsToYmd_(ymd, months) {
+    var p = String(ymd).slice(0, 10).split('-').map(Number);
+    var last = new Date(p[0], p[1] - 1 + months + 1, 0).getDate();
+    var d = new Date(p[0], p[1] - 1 + months, Math.min(p[2], last));
+    return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
+  }
+  /** Editar uma parcela vale pra compra inteira (conta, categoria, nomes, horário, flag e DATA DA COMPRA); o valor é só da
+   *  parcela aberta -- espelho de updateInstallmentGroup_ (Transactions.js). Reflete na hora em todas as cópias em memória. */
+  function applyOptimisticInstallmentGroupEdit_(t, payload) {
+    var baseDescription = payload.description !== undefined ? String(payload.description).replace(/\s*\(\d+\/\d+\)\s*$/, '') : null;
+    var lists = [STATE.allTransactions, STATE.dashboard && STATE.dashboard.recentTransactions, STATE.pendingTransactions];
+    lists.forEach(function (list) {
+      (list || []).forEach(function (row) {
+        if (row.installmentGroupId !== t.installmentGroupId) return;
+        ['time', 'accountId', 'categoryId', 'counterparty', 'excludeFromAnalysis'].forEach(function (k) {
+          if (payload[k] !== undefined) row[k] = payload[k];
+        });
+        if (payload.date !== undefined) {
+          row.purchaseDate = payload.date;
+          row.date = addMonthsToYmd_(payload.date, Math.max(0, (row.installmentSeq || 1) - 1));
+        }
+        if (baseDescription !== null) row.description = baseDescription + (baseDescription ? ' ' : '') + '(' + row.installmentSeq + '/' + row.installmentTotal + ')';
+        if (row.id === t.id) {
+          if (payload.amount !== undefined) row.amount = payload.amount;
+          ['forecastId', 'forecastCycleMonth'].forEach(function (k) { if (payload[k] !== undefined) row[k] = payload[k]; });
+        }
+      });
     });
   }
 
@@ -7520,7 +7794,7 @@
         '<h2>Editar transferência</h2>' +
         txKindToggleHtml_(t.kind) +
         '<div class="field" style="display:flex;gap:8px">' +
-          '<div style="flex:1"><label>Data</label><input type="date" id="e-date" value="' + t.date + '"></div>' +
+          '<div style="flex:1"><label>Data</label><input type="date" id="e-date" value="' + (t.purchaseDate || t.date) + '"></div>' +
           '<div style="flex:1"><label>Horário</label><input type="time" id="e-time" value="' + (t.time || '') + '"></div>' +
         '</div>' +
         '<div class="field"><label>De</label><div id="e-from-field" class="capsule-field"></div></div>' +
@@ -7704,7 +7978,7 @@
             // .field-action-group: os 2 links lado a lado, ~um espaço entre eles, colados na
             // direita (ver Stylesheet.html) -- e o flex de fora vê UM item só (o grupo), não 2.
             '<span class="field-action-group">' +
-              (t.kind === 'expense' && !isInstallment && !converting ? '<span id="e-refund-field"></span>' : '') +
+              (t.kind === 'expense' && !converting ? '<span id="e-refund-field"></span>' : '') +
               (t.kind === 'income' && !converting ? '<span id="e-refundlink-field"></span>' : '') +
               '<span id="e-outlier-field"></span>' +
             '</span>' +
@@ -7793,21 +8067,23 @@
         var initial = sharesOfPassive_(t.id).map(function (s) {
           return { shareId: s.id, personId: s.personId, personName: personName_(s.personId), expectedAmount: s.expectedAmount };
         });
-        openRefundSharesPopup_(function () { return t.amount; }, initial, function (staged) {
+        openRefundSharesPopup_(function () { return purchaseTotalOf_(t); }, initial, function (staged) {
           // Otimista, mesmo padrão de renderRefundLinkButtonE_ (troca STATE.refundShares
           // com IDs temporários pra quem ainda não é real e atualiza o botão na hora, sem
           // esperar o servidor).
           var prevShares = sharesOfPassive_(t.id);
           var resolving = beginResolvingStagedSharePeople_(staged);
+          // Compra parcelada: as partes são da compra inteira e ficam na parcela âncora (ver refundAnchorOf_).
+          var anchorId = refundAnchorOf_(t).id;
           var tempShares = resolving.shares.map(function (s) {
-            return { id: s.shareId || ('tmp-' + Math.random().toString(36).slice(2)), passiveTransactionId: t.id, personId: s.personId, expectedAmount: s.expectedAmount };
+            return { id: s.shareId || ('tmp-' + Math.random().toString(36).slice(2)), passiveTransactionId: anchorId, personId: s.personId, expectedAmount: s.expectedAmount };
           });
-          STATE.refundShares = STATE.refundShares.filter(function (s) { return s.passiveTransactionId !== t.id; }).concat(tempShares);
+          STATE.refundShares = STATE.refundShares.filter(function (s) { return prevShares.indexOf(s) === -1; }).concat(tempShares);
           render();
           renderRefundButtonE_();
           afterMutation_(Promise.all([resolveRealId_(t.id), resolving.ready]).then(function (resolved) {
             return run('setRefundSharesForPassiveTransaction', { passiveTransactionId: resolved[0], shares: resolved[1] }).then(function (createdShares) {
-              STATE.refundShares = STATE.refundShares.filter(function (s) { return s.passiveTransactionId !== resolved[0] && s.passiveTransactionId !== t.id; });
+              STATE.refundShares = STATE.refundShares.filter(function (s) { return tempShares.indexOf(s) === -1 && s.passiveTransactionId !== resolved[0] && s.passiveTransactionId !== t.id; });
               createdShares.forEach(function (row) {
                 STATE.refundShares.push({ id: row.ID, passiveTransactionId: row.PassiveTransactionID, personId: row.PersonID, expectedAmount: Number(row.ExpectedAmount) });
               });
@@ -7815,7 +8091,7 @@
               renderRefundButtonE_();
             });
           })).catch(function (err) {
-            STATE.refundShares = STATE.refundShares.filter(function (s) { return s.passiveTransactionId !== t.id; }).concat(prevShares);
+            STATE.refundShares = STATE.refundShares.filter(function (s) { return tempShares.indexOf(s) === -1 && s.passiveTransactionId !== t.id; }).concat(prevShares);
             render();
             renderRefundButtonE_();
             showToast(err.message, true);
@@ -7988,8 +8264,13 @@
         // Antes de copiar a flag pros lançamentos em memória (precisa do valor ANTERIOR pra saber
         // se mudou): ajusta a rosca/totais do mês, UMA vez (não por cópia do lançamento).
         var flagTargets = liveTxTargets_(t.id);
-        if (flagTargets.length) applyOptimisticDashboardFlagChange_(flagTargets[0], payload.excludeFromAnalysis);
-        flagTargets.forEach(function (target) { applyOptimisticTxEdit_(target, payload); });
+        if (isInstallment) {
+          // A flag vale pra compra inteira: acerta os totais do mês de cada parcela que cai nele.
+          STATE.allTransactions.filter(function (x) { return x.installmentGroupId === t.installmentGroupId; })
+            .forEach(function (x) { applyOptimisticDashboardFlagChange_(x, payload.excludeFromAnalysis); });
+        } else if (flagTargets.length) applyOptimisticDashboardFlagChange_(flagTargets[0], payload.excludeFromAnalysis);
+        if (isInstallment) applyOptimisticInstallmentGroupEdit_(t, payload);
+        else flagTargets.forEach(function (target) { applyOptimisticTxEdit_(target, payload); });
         render();
 
         // Mesmo motivo do delete: a prévia é clicável, então payload.id pode ser "tmp-".
@@ -10903,18 +11184,12 @@
     return progress;
   }
   /**
-   * Data efetiva de um lançamento PRA FINS DE ORÇAMENTO -- normalmente a própria data
-   * (t.date), MAS pra parcelas 2+ de uma compra parcelada, usa o dia 1 do mês da FATURA
-   * dela (t.billMonth) em vez da data da compra. Toda parcela nasce com a MESMA t.date
-   * (a da compra em si, ver createTransaction/Transactions.js) -- sem isso, uma compra
-   * em 6x contava o valor inteiro de uma vez só na data da compra e nunca mais aparecia
-   * depois no orçamento (pedido do usuário: cada parcela deveria contar no período em
-   * que ela é de fato cobrada). A 1ª parcela continua na data da compra mesmo (pedido
-   * explícito) -- só a 2ª em diante usa a fatura. Só afeta ORÇAMENTOS -- Extrato/Início/
-   * resto do app continuam usando t.date puro (escopo confirmado com o usuário).
+   * Data em que um lançamento conta nos orçamentos. O servidor já entrega t.date como a data EFETIVA (parcela i de uma
+   * compra parcelada = data da compra + i-1 meses, no mesmo dia -- ver effectiveDateOfRow_, Transactions.js), a mesma em
+   * todas as telas; t.purchaseDate é a data gravada (a da compra). Fica como função só pra os chamadores continuarem
+   * apontando pra um lugar único.
    */
   function budgetEffectiveDate_(t) {
-    if (t.installmentSeq && t.installmentSeq > 1 && t.billMonth) return t.billMonth + '-01';
     return t.date;
   }
   /**
@@ -11404,12 +11679,13 @@
   /** Contas que entram na Projeção do saldo — investimento só quando o toggle "Incluir
    *  investimentos" estiver ligado (ver buildBalanceTrendHtml_). */
   function trendAccounts_() {
+    // Cartão fora: o limite restante não é dinheiro; a dívida dele entra descontada (ver cardDebtAsOfYmd_).
     return STATE.accounts.filter(function (a) {
-      return STATE.trendIncludeInvestments || a.type !== 'investment';
+      return a.type !== 'credit_card' && (STATE.trendIncludeInvestments || a.type !== 'investment');
     });
   }
 
-  /** Saldo total (ver trendAccounts_) considerando só lançamentos com data ≤ ymd. */
+  /** Saldo total (ver trendAccounts_) considerando só lançamentos com data ≤ ymd, menos a dívida dos cartões até esse dia. */
   function totalBalanceAsOfYmd_(ymd) {
     return trendAccounts_()
       .reduce(function (sum, a) {
@@ -11418,7 +11694,7 @@
           return s + (t.kind === 'income' || t.kind === 'transfer_in' ? 1 : -1) * t.amount;
         }, 0);
         return sum + a.initialBalance + txSum;
-      }, 0);
+      }, 0) - cardDebtAsOfYmd_(ymd);
   }
 
   /**
@@ -11521,8 +11797,9 @@
       return totalBalanceAsOfYmd_(ym + '-' + String(daysInMonth_(ym)).padStart(2, '0'));
     });
 
+    // Saldo de hoje = contas (sem cartão) menos a dívida TODA dos cartões, parcelas futuras incluídas (já comprometidas).
     var currentBalance = trendAccounts_()
-      .reduce(function (sum, a) { return sum + a.balance; }, 0);
+      .reduce(function (sum, a) { return sum + a.balance; }, 0) - cardDebtAsOfYmd_('9999-12-31');
 
     var planImpactByMonth = {};
     // Quantos Planos (não a soma dos valores, isso já é planImpactByMonth) cada mês tem

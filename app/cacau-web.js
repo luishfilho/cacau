@@ -2068,7 +2068,7 @@ function getDashboardData(allTransactions) {
   // Sem os lançamentos marcados "Não considerar em análises?" (pedido explícito do usuário): a
   // rosca "Gastos por categoria" e os totais do mês mostram só o gasto/receita "normal". O saldo
   // das contas (acima) continua contando TUDO -- por isso essas somas deixam de bater com ele.
-  var monthTxs = allTxs.filter(function (t) { return t.Date && t.Date.indexOf(ym) === 0 && !parseBoolCell_(t.ExcludeFromAnalysis); });
+  var monthTxs = allTxs.filter(function (t) { return t.Date && effectiveDateOfRow_(t).indexOf(ym) === 0 && !parseBoolCell_(t.ExcludeFromAnalysis); });
 
   var expensesByCategory = {};
   monthTxs.forEach(function (t) {
@@ -3764,7 +3764,7 @@ function processRecurringRules() {
  * a partir do que getBootstrapData expõe cru aqui: listPeople/listRefundShares/
  * listRefundLinks.
  *
- * Escopo v1: só despesa NÃO parcelada pode virar "passivo" (ver assertPassiveEligible_);
+ * Escopo: só despesa pode virar "passivo" (compra parcelada incluída, ver assertPassiveEligible_);
  * só receita pode ser "ativo" (ver assertActiveEligible_). O par de cancelamento
  * automático 99/Amazon (checkAndRemoveRefundPair_, Inbox.js) é um sistema totalmente
  * separado — aquele é "essa despesa nunca deveria ter existido" (cancela e some); este
@@ -3875,13 +3875,29 @@ function listRefundLinks() {
   });
 }
 
-/** Só despesa NÃO parcelada pode virar "passivo" — parcelamento já espalha a compra em
- *  N linhas (InstallmentGroupID), e ligar reembolso a "qual das parcelas" é uma
- *  ambiguidade que não apareceu em nenhum caso de uso real ainda; melhor recusar cedo
- *  do que adivinhar (fica pra decidir se aparecer a necessidade de verdade). */
+/** Só despesa pode virar "passivo". Numa compra PARCELADA o reembolso é da compra inteira: as partes das pessoas ficam
+ *  penduradas na PRIMEIRA parcela que ainda existir (a "âncora", ver installmentAnchorRow_), somam até o valor TOTAL da
+ *  compra, e o abatimento é espalhado proporcionalmente entre as parcelas na leitura (nada gravado é reescrito). */
 function assertPassiveEligible_(tx) {
   if (tx.Kind !== 'expense') throw new Error('Só uma despesa pode ficar aguardando reembolso.');
-  if (tx.InstallmentGroupID) throw new Error('Compra parcelada ainda não pode ficar aguardando reembolso.');
+}
+
+/** Linhas da compra a que `tx` pertence: as parcelas do grupo (ordenadas pelo número) ou só ela mesma. */
+function purchaseRowsOf_(tx) {
+  if (!tx.InstallmentGroupID) return [tx];
+  var rows = readAll_('Transactions').filter(function (t) { return t.InstallmentGroupID === tx.InstallmentGroupID; });
+  if (!rows.length) return [tx];
+  return rows.sort(function (a, b) { return Number(a.InstallmentSeq) - Number(b.InstallmentSeq); });
+}
+
+/** Parcela onde ficam penduradas as Shares de uma compra parcelada: a de menor número que ainda existe. */
+function installmentAnchorRow_(tx) {
+  return purchaseRowsOf_(tx)[0];
+}
+
+/** Valor TOTAL da compra (soma das parcelas que ainda existem; o próprio valor numa despesa comum), em centavos. */
+function purchaseTotalCents_(tx) {
+  return purchaseRowsOf_(tx).reduce(function (sum, t) { return sum + Math.round(Number(t.Amount) * 100); }, 0);
 }
 
 /** Só receita pode ser "ativo" — uma transferência é entre CONTAS SUAS, nunca dinheiro
@@ -3917,15 +3933,22 @@ function setRefundSharesForPassiveTransaction(input) {
   var tx = findById_('Transactions', input.passiveTransactionId);
   if (!tx) throw new Error('Lançamento não encontrado.');
   assertPassiveEligible_(tx);
+  // Compra parcelada: tudo é da compra inteira, ancorado na primeira parcela que existe (ver assertPassiveEligible_).
+  var purchaseRows = purchaseRowsOf_(tx);
+  var anchor = purchaseRows[0];
   var shares = input.shares || [];
   shares.forEach(function (s) {
     if (!s.personId) throw new Error('Pessoa é obrigatória em cada parte.');
     if (!(Number(s.expectedAmount) > 0)) throw new Error('Valor esperado precisa ser maior que zero.');
   });
   var totalExpected = shares.reduce(function (sum, s) { return sum + Number(s.expectedAmount); }, 0);
-  if (Math.round(totalExpected * 100) > Math.round(Number(tx.Amount) * 100)) {
-    throw new Error('A soma dos valores esperados não pode passar do valor da despesa.');
+  if (Math.round(totalExpected * 100) > purchaseTotalCents_(tx)) {
+    throw new Error(purchaseRows.length > 1
+      ? 'A soma dos valores esperados não pode passar do valor total da compra parcelada.'
+      : 'A soma dos valores esperados não pode passar do valor da despesa.');
   }
+  var purchaseIds = {};
+  purchaseRows.forEach(function (r) { purchaseIds[r.ID] = true; });
 
   // keepIds precisa ter o ID de TODA linha do resultado final, criada ou mantida —
   // não só as que tinham shareId — senão uma Share recém-CRIADA aqui mesmo (sem
@@ -3935,12 +3958,12 @@ function setRefundSharesForPassiveTransaction(input) {
   var result = shares.map(function (s) {
     var row;
     if (s.shareId) {
-      row = updateRowById_('RefundShares', s.shareId, { ExpectedAmount: Number(s.expectedAmount) });
+      row = updateRowById_('RefundShares', s.shareId, { ExpectedAmount: Number(s.expectedAmount), PassiveTransactionID: anchor.ID });
       if (!row) throw new Error('Parte não encontrada.');
     } else {
       if (!findById_('People', s.personId)) throw new Error('Pessoa não encontrada.');
       row = appendRow_('RefundShares', {
-        PassiveTransactionID: input.passiveTransactionId,
+        PassiveTransactionID: anchor.ID,
         PersonID: s.personId,
         ExpectedAmount: Number(s.expectedAmount)
       });
@@ -3948,7 +3971,7 @@ function setRefundSharesForPassiveTransaction(input) {
     keepIds[row.ID] = true;
     return row;
   });
-  readAll_('RefundShares').filter(function (s) { return s.PassiveTransactionID === input.passiveTransactionId; })
+  readAll_('RefundShares').filter(function (s) { return purchaseIds[s.PassiveTransactionID]; })
     .forEach(function (s) { if (!keepIds[s.ID]) removeRefundShare_(s.ID); });
   return result;
 }
@@ -4010,8 +4033,19 @@ function setRefundLinksForActiveTransaction(input) {
  * sozinho" foi a opção escolhida).
  */
 
-/** Lançamento (passivo OU ativo) removido: cascateia pras Shares/Links dele. */
-function cascadeRefundsOnTransactionDelete_(transactionId) {
+/** Lançamento (passivo OU ativo) removido: cascateia pras Shares/Links dele. skipReanchor: a compra parcelada inteira
+ *  está sendo removida, então não há parcela herdeira. */
+function cascadeRefundsOnTransactionDelete_(transactionId, skipReanchor) {
+  // Parcela com reembolso removida SOZINHA ("remover só esta parcela"): as partes são da compra, então passam pra próxima
+  // parcela que sobrou em vez de sumirem junto com a âncora.
+  var removed = findById_('Transactions', transactionId);
+  if (!skipReanchor && removed && removed.InstallmentGroupID) {
+    var heirs = purchaseRowsOf_(removed).filter(function (t) { return t.ID !== transactionId; });
+    if (heirs.length) {
+      readAll_('RefundShares').filter(function (s) { return s.PassiveTransactionID === transactionId; })
+        .forEach(function (s) { updateRowById_('RefundShares', s.ID, { PassiveTransactionID: heirs[0].ID }); });
+    }
+  }
   readAll_('RefundShares').filter(function (s) { return s.PassiveTransactionID === transactionId; })
     .forEach(function (s) { removeRefundShare_(s.ID); });
   readAll_('RefundLinks').filter(function (l) { return l.ActiveTransactionID === transactionId; })
@@ -4771,7 +4805,30 @@ function dueDateForBillMonth_(billMonth, closingDay, dueDay) {
   var parts = billMonth.split('-').map(Number);
   var year = parts[0], monthIndex0 = parts[1] - 1;
   if (dueDay < closingDay) monthIndex0 += 1;
-  return new Date(year, monthIndex0, dueDay);
+  // Dia 29-31 num mês mais curto vence no ÚLTIMO dia do mês (new Date(.., 31) em fevereiro estouraria pra março).
+  var lastDay = new Date(year, monthIndex0 + 1, 0).getDate();
+  return new Date(year, monthIndex0, Math.min(dueDay, lastDay));
+}
+
+/** Soma meses a uma data 'YYYY-MM-DD' mantendo o dia; se o mês de chegada é mais curto, cai no último dia dele
+ *  (31/jan + 1 mês = 28/fev, não 03/mar). */
+function addMonthsToYmd_(ymd, months) {
+  var parts = String(ymd).slice(0, 10).split('-').map(Number);
+  var monthIndex0 = parts[1] - 1 + months;
+  var lastDay = new Date(parts[0], monthIndex0 + 1, 0).getDate();
+  var d = new Date(parts[0], monthIndex0, Math.min(parts[2], lastDay));
+  return d.getFullYear() + '-' + pad2_(d.getMonth() + 1) + '-' + pad2_(d.getDate());
+}
+
+/**
+ * Data em que um lançamento CONTA nas telas (Início, Extrato, orçamentos, médias, Projeção). Toda parcela é gravada com
+ * a MESMA Date (a da compra) -- a parcela i conta i-1 meses depois, no mesmo dia. Compras comuns: a própria Date.
+ * A Date gravada nunca muda por causa disso (o saldo e as consolidações de saldo seguem a ordem por Date gravada).
+ */
+function effectiveDateOfRow_(t) {
+  var seq = Number(t.InstallmentSeq);
+  if (t.InstallmentGroupID && seq > 1) return addMonthsToYmd_(t.Date, seq - 1);
+  return t.Date;
 }
 
 function splitAmount_(totalAmount, installments) {
@@ -4797,7 +4854,8 @@ function splitAmount_(totalAmount, installments) {
  */
 function mapTransactionRow_(t) {
   return {
-    id: t.ID, date: t.Date, time: t.Time || null, accountId: t.AccountID || null, categoryId: t.CategoryID || null,
+    // date = data em que CONTA (parcela 2+ = data da compra + i-1 meses); purchaseDate = a Date gravada (a da compra).
+    id: t.ID, date: effectiveDateOfRow_(t), purchaseDate: t.Date, time: t.Time || null, accountId: t.AccountID || null, categoryId: t.CategoryID || null,
     kind: t.Kind, amount: Number(t.Amount), description: t.Description, counterparty: t.Counterparty || null,
     billMonth: t.BillMonth || null,
     installmentSeq: t.InstallmentSeq === '' ? null : Number(t.InstallmentSeq),
@@ -4933,10 +4991,28 @@ function updateTransaction(input) {
 
   var effectiveAccountId = updates.AccountID !== undefined ? updates.AccountID : existing.AccountID;
   var effectiveAccount = effectiveAccountId ? findById_('Accounts', effectiveAccountId) : null;
-  if (updates.Date && effectiveAccount && effectiveAccount.Type === 'credit_card' && !existing.InstallmentGroupID) {
-    updates.BillMonth = billMonthForDate_(updates.Date, Number(effectiveAccount.ClosingDay));
+  var effectiveIsCard = !!effectiveAccount && effectiveAccount.Type === 'credit_card';
+  var groupRows = existing.InstallmentGroupID
+    ? readAll_('Transactions').filter(function (t) { return t.InstallmentGroupID === existing.InstallmentGroupID; })
+    : [];
+  if (groupRows.length > 1 && !effectiveIsCard) {
+    throw new Error('Compra parcelada só pode ficar numa conta de cartão de crédito.');
   }
-  var updated = updateRowById_('Transactions', input.id, updates);
+  var dateOrAccountChanged = updates.Date !== undefined || updates.AccountID !== undefined;
+  if (dateOrAccountChanged && groupRows.length <= 1) {
+    // A fatura acompanha conta e data: cartão recalcula pelo dia de fechamento; saiu do cartão, não sobra fatura nenhuma.
+    // (Parcela que sobrou sozinha depois de remover as outras mantém o deslocamento da sua parcela.)
+    var seqOffset = existing.InstallmentGroupID ? Math.max(0, Number(existing.InstallmentSeq) - 1) : 0;
+    updates.BillMonth = effectiveIsCard
+      ? addMonthsToYm_(billMonthForDate_(updates.Date !== undefined ? updates.Date : existing.Date, Number(effectiveAccount.ClosingDay)), seqOffset)
+      : '';
+  }
+  var updated;
+  if (groupRows.length > 1) {
+    updated = updateInstallmentGroup_(existing, groupRows, updates, effectiveAccount);
+  } else {
+    updated = updateRowById_('Transactions', input.id, updates);
+  }
   // Ver cascadeRefundsOnTransactionAmountChange_ (Refunds.js): desfaz vínculos de
   // reembolso que não cabem mais no novo valor (só do lado ATIVO). Compara com o valor
   // ANTERIOR (não só "updates.Amount !== undefined") porque o cliente manda amount em
@@ -4957,6 +5033,44 @@ function updateTransaction(input) {
   return updated;
 }
 
+/** Tira o sufixo " (i/N)" que createTransaction põe na descrição de cada parcela. */
+function stripInstallmentSuffix_(description) {
+  return String(description || '').replace(/\s*\(\d+\/\d+\)\s*$/, '');
+}
+
+/**
+ * Editar UMA parcela edita a compra inteira nos campos que são da compra (conta, categoria, estabelecimento, descrição,
+ * horário, flag de fora das análises e data da compra); o VALOR continua só da parcela aberta. A fatura (BillMonth) de
+ * cada parcela é recalculada quando a conta ou a data mudam: parcela i cai i-1 faturas depois da primeira. O vínculo
+ * com recorrente fica só na parcela editada (um parcelado não é lançado por recorrente). Devolve a linha editada.
+ */
+function updateInstallmentGroup_(existing, groupRows, updates, account) {
+  var shared = {};
+  ['Time', 'AccountID', 'CategoryID', 'Counterparty', 'ExcludeFromAnalysis', 'Date'].forEach(function (k) {
+    if (updates[k] !== undefined) shared[k] = updates[k];
+  });
+  var ownOnly = {};
+  ['Amount', 'ForecastID', 'ForecastCycleMonth'].forEach(function (k) {
+    if (updates[k] !== undefined) ownOnly[k] = updates[k];
+  });
+  var baseDescription = updates.Description !== undefined ? stripInstallmentSuffix_(updates.Description) : null;
+  var baseBillMonth = (updates.Date !== undefined || updates.AccountID !== undefined)
+    ? billMonthForDate_(updates.Date !== undefined ? updates.Date : existing.Date, Number(account.ClosingDay))
+    : null;
+  var result = null;
+  groupRows.forEach(function (row) {
+    var rowUpdates = Object.assign({}, shared);
+    if (row.ID === existing.ID) Object.assign(rowUpdates, ownOnly);
+    if (baseDescription !== null) {
+      rowUpdates.Description = baseDescription + (baseDescription ? ' ' : '') + '(' + row.InstallmentSeq + '/' + row.InstallmentTotal + ')';
+    }
+    if (baseBillMonth !== null) rowUpdates.BillMonth = addMonthsToYm_(baseBillMonth, Number(row.InstallmentSeq) - 1);
+    var updatedRow = Object.keys(rowUpdates).length ? updateRowById_('Transactions', row.ID, rowUpdates) : row;
+    if (row.ID === existing.ID) result = updatedRow;
+  });
+  return result;
+}
+
 function deleteTransaction(id) {
   var existing = findById_('Transactions', id);
   if (!existing) throw new Error('Lançamento não encontrado.');
@@ -4973,7 +5087,7 @@ function deleteInstallmentGroupFrom(groupId, fromSeq) {
   var txs = readAll_('Transactions').filter(function (t) {
     return t.InstallmentGroupID === groupId && Number(t.InstallmentSeq) >= Number(fromSeq);
   });
-  txs.forEach(function (t) { deleteRowById_('Transactions', t.ID); });
+  txs.forEach(function (t) { cascadeRefundsOnTransactionDelete_(t.ID, true); deleteRowById_('Transactions', t.ID); });
   return txs.length;
 }
 
@@ -4987,7 +5101,7 @@ function deleteInstallmentGroup(groupId) {
   if (!groupId) throw new Error('InstallmentGroupID é obrigatório.');
   var txs = readAll_('Transactions').filter(function (t) { return t.InstallmentGroupID === groupId; });
   if (!txs.length) throw new Error('Parcelamento não encontrado.');
-  txs.forEach(function (t) { deleteRowById_('Transactions', t.ID); });
+  txs.forEach(function (t) { cascadeRefundsOnTransactionDelete_(t.ID, true); deleteRowById_('Transactions', t.ID); });
   return txs.length;
 }
 
@@ -5086,8 +5200,9 @@ function listTransactions(filters, allTransactions) {
     if (filters.categoryId && t.CategoryID !== filters.categoryId) return false;
     if (filters.kind && t.Kind !== filters.kind) return false;
     if (filters.billMonth && t.BillMonth !== filters.billMonth) return false;
-    if (filters.dateFrom && t.Date < filters.dateFrom) return false;
-    if (filters.dateTo && t.Date > filters.dateTo) return false;
+    var d = effectiveDateOfRow_(t);
+    if (filters.dateFrom && d < filters.dateFrom) return false;
+    if (filters.dateTo && d > filters.dateTo) return false;
     return true;
   });
   // Desempata por Time (tratando "sem horário" como vazio, pra não cair direto no
@@ -5095,7 +5210,8 @@ function listTransactions(filters, allTransactions) {
   // CreatedAt, senão a ordem dentro do mesmo dia/horário ficaria na ordem de inserção
   // da planilha (mais antigo primeiro).
   txs.sort(function (a, b) {
-    if (a.Date !== b.Date) return a.Date < b.Date ? 1 : -1;
+    var aDate = effectiveDateOfRow_(a), bDate = effectiveDateOfRow_(b);
+    if (aDate !== bDate) return aDate < bDate ? 1 : -1;
     var aTime = a.Time || '', bTime = b.Time || '';
     if (aTime !== bTime) return aTime < bTime ? 1 : -1;
     return a.CreatedAt < b.CreatedAt ? 1 : (a.CreatedAt > b.CreatedAt ? -1 : 0);
@@ -5114,6 +5230,8 @@ function getCreditCardBillSummary(accountId, allTransactions) {
   var byMonth = {};
   txs.forEach(function (t) {
     if (!t.BillMonth) return;
+    // Consolidação de saldo (ajuste do limite) não é compra: ficar fora do gasto da fatura.
+    if (isBalanceAnchorRow_(t)) return;
     if (!byMonth[t.BillMonth]) byMonth[t.BillMonth] = { spent: 0, paid: 0 };
     if (t.Kind === 'expense') byMonth[t.BillMonth].spent += Number(t.Amount);
     if (t.Kind === 'transfer_in') byMonth[t.BillMonth].paid += Number(t.Amount);
@@ -5125,7 +5243,8 @@ function getCreditCardBillSummary(accountId, allTransactions) {
     var dueDate = dueDateForBillMonth_(billMonth, closingDay, dueDay);
     var isOpen = billMonth === currentBillMonth;
     var isPaid = data.paid >= data.spent && data.spent > 0;
-    var status = isOpen ? 'aberta' : (isPaid ? 'paga' : (dueDate < today ? 'atrasada' : 'fechada'));
+    // 'futura' = fatura de um mês depois do atual (ex.: parcelas que ainda vão cair): nem fechou, então não dá pra pagar.
+    var status = isOpen ? 'aberta' : (isPaid ? 'paga' : (billMonth > currentBillMonth ? 'futura' : (dueDate < today ? 'atrasada' : 'fechada')));
     return {
       billMonth: billMonth, spent: data.spent, paid: data.paid,
       remaining: Math.max(0, data.spent - data.paid),
