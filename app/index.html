@@ -757,7 +757,8 @@
   .cycle-bar span { display: block; height: 100%; min-width: 2px; }
   .cycle-bar .cycle-bar-left { background: var(--primary); }
   .cycle-bar .cycle-bar-over { position: absolute; top: 0; right: 0; background: var(--cycle-over); }
-  .cycle-mark { position: absolute; top: 0; bottom: 0; width: min(24px, var(--sw, 24px)); background: linear-gradient(90deg, var(--c), transparent); pointer-events: none; }
+  /* Triângulo pequeno apontando pra esquerda, centrado na barra, no fim (direita) da sub-barra do grupo: --r = onde ela termina, --sw = largura dela. */
+  .cycle-mark { --w: min(9px, var(--sw, 9px)); position: absolute; top: 50%; left: calc(var(--r, 100%) - var(--w)); width: var(--w); height: 13px; transform: translateY(-50%); background: var(--c); clip-path: polygon(0 50%, 100% 0, 100% 100%); pointer-events: none; }
   .cycle-legend .cycle-dot-left { background: var(--primary); }
   .cycle-legend .cycle-dot-over { background: var(--cycle-over); }
   .cycle-legend { display: flex; flex-wrap: wrap; gap: 6px 14px; margin-top: 10px; font-size: 12px; color: var(--text-muted); }
@@ -775,11 +776,6 @@
     @keyframes cycle-grow-r { from { clip-path: inset(0 0 0 100%); } to { clip-path: inset(0 0 0 0); } }
     @keyframes cycle-mark-in { from { opacity: 0; } }
   }
-  .cycle-saved { margin-top: 14px; padding-top: 12px; border-top: 1px solid var(--border); }
-  .cycle-saved-title { font-size: 13px; color: var(--text-muted); margin-bottom: 8px; }
-  .cycle-saved-items { display: flex; flex-wrap: wrap; gap: 8px 28px; }
-  .cycle-saved-items strong { display: block; font-size: 18px; }
-  .cycle-saved-items .muted { font-size: 12px; }
   /* Editar cards só existe no Início: escondido, ele encolhe (altura 0 + some) em vez de sumir de uma vez, então a
      coluna centralizada se reacomoda com animação. */
   #edit-cards-btn[hidden] { display: flex; height: 0; margin-top: -8px; border-width: 0; opacity: 0; transform: scale(.5); overflow: hidden; pointer-events: none; }
@@ -797,14 +793,9 @@
   .tree-modal { text-align: center; }
   .tree-modal h2 { margin: 0 0 2px; }
   .tree-img-wrap { height: min(300px, 40vh); display: flex; align-items: center; justify-content: center; margin: 4px 0 6px; }
-  .tree-art { position: relative; display: inline-block; line-height: 0; transform-origin: 50% 92%; animation: tree-sway 6s ease-in-out infinite; }
+  /* O círculo da figura fica parado (sem balanço nem respiração): só o vídeo dentro dele se mexe. */
+  .tree-art { position: relative; display: inline-block; line-height: 0; }
   .tree-art img { max-height: min(300px, 40vh); max-width: 100%; transition: filter .4s ease; }
-  /* Balanço: a árvore inteira inclina um pouco em volta da base (--sway = amplitude do estágio). */
-  @keyframes tree-sway { 0%, 100% { transform: rotate(calc(var(--sway, 1deg) * -1)); } 50% { transform: rotate(var(--sway, 1deg)); } }
-  /* Semente e broto não balançam: respiram. */
-  .tree-art.tree-breath { animation: tree-breath 4s ease-in-out infinite; transform-origin: 50% 70%; }
-  @keyframes tree-breath { 0%, 100% { transform: scale(1); } 50% { transform: scale(1.035); } }
-  .tree-art.tree-still { animation: none; }
   /* Troca de estágio: a imagem antiga some por cima da nova. */
   .tree-art img.tree-prev { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); animation: tree-fade-out 1.6s ease forwards; pointer-events: none; }
   .tree-art img.tree-cur-fade { animation: tree-fade-in 1.6s ease both; }
@@ -825,7 +816,7 @@
     100% { opacity: 0; transform: translate(var(--dx, 14px), 150px) rotate(var(--rot, 200deg)); }
   }
   @media (prefers-reduced-motion: reduce) {
-    .tree-art, .tree-art.tree-breath, .tree-art img.tree-prev, .tree-art img.tree-cur-fade { animation: none; }
+    .tree-art img.tree-prev, .tree-art img.tree-cur-fade { animation: none; }
     .tree-art img.tree-prev { display: none; }
     .tree-fx { display: none; }
   }
@@ -1003,11 +994,7 @@
     .tx-f-amount > .tx-inst-col { flex: 0 0 0 !important; margin-left: 0; opacity: 0; overflow: hidden; visibility: hidden; }
     .tx-f-amount.has-inst > .tx-inst-col { flex: 0 0 96px !important; margin-left: 10px; opacity: 1; overflow: visible; visibility: visible; }
     .tx-f-amount .field-action-group { flex-wrap: wrap; gap: 0 10px; min-width: 0; max-width: 100%; }
-    .tx-f-category .capsule-field, .tx-f-account .capsule-field, .tx-f-from .capsule-field, .tx-f-to .capsule-field { gap: 8px; }
-    .tx-f-category .capsule, .tx-f-account .capsule, .tx-f-from .capsule, .tx-f-to .capsule {
-      padding: 10px 16px; font-size: 14px; min-height: 44px; display: inline-flex; align-items: center; justify-content: center;
-    }
-    .tx-f-account .acc-color-name, .tx-f-from .acc-color-name, .tx-f-to .acc-color-name { font-size: 13px; }
+    /* Cápsulas: do tamanho do PC (sem sobrescrever padding/fonte/altura no celular). */
     /* Título do campo bem mais forte que as perguntas de ação ("Lembrar categoria?", "Reembolso?"). */
     .modal .field label { font-size: 14px; font-weight: 600; color: var(--text); }
     .modal .field-action-link { font-size: 12px; }
@@ -1195,10 +1182,8 @@
     @keyframes sup-grow { from { transform: scaleX(0); } }
     @keyframes sup-rise { from { transform: scaleY(0); } }
   }
-  /* No Início o Resumo é um card comum (não gruda no topo) e o dia não leva a lugar nenhum. */
+  /* No Início o Resumo é um card comum (não gruda no topo, não colapsa); tocar num dia leva ao dia no Extrato. */
   .tx-calendar-card.tx-calendar-home { position: static; }
-  .tx-calendar-home .day-bar-clickable { cursor: default; }
-  .tx-calendar-home .day-bar-clickable:hover { background: none; }
   /* "×" na extrema direita do cabeçalho de Filtrar lançamentos. */
   .tx-filters-clear { flex-shrink: 0; display: inline-flex; align-items: center; justify-content: center; width: 28px; height: 28px; padding: 0; margin: 0 -4px 0 0;
     border: none; border-radius: 50%; background: none; color: var(--text-muted); cursor: pointer; }
@@ -2130,7 +2115,6 @@
     txCalendarExpanded: true, // card do calendário do Extrato começa aberto (diferente do de filtro) -- é o conteúdo mais visual da tela
     txCalendarMode: 'expense', // o que as barras do Resumo somam por dia: 'expense' | 'income'
     txCalendarScrollLeft: null, // posição de rolagem horizontal do Resumo -- null = ainda não rolado À MÃO (abre na data de hoje); só o usuário rolando grava (ver positionTxCalendarScroll_)
-    homeCalendarExpanded: true, // o Resumo do Início tem estado próprio (aberto/fechado e rolagem), separado do Resumo do Extrato
     homeCalendarScrollLeft: null,
     pendingTransactions: [], // lançamentos otimistas, mostrados antes do servidor confirmar
     deletingIds: [], // lançamentos que o usuário já mandou excluir, ocultos até o servidor confirmar
@@ -2296,7 +2280,7 @@
   }
   /**
    * commit() é a parte LEVE (atributo, ícone, preferência) e roda dentro da transição; heavy() (o render() completo, que
-   * recalcula cores lidas por getComputedStyle) roda só depois que a animação já começou, pra ela não esperar por ele.
+   * recalcula cores lidas por getComputedStyle) roda só depois que a animação termina, pra ela não esperar por ele.
    * As barras do Android (syncNativeTheme_) trocam quando o círculo termina de cobrir a tela.
    */
   function changeTheme_(theme, commit, origin, heavy) {
@@ -2312,9 +2296,14 @@
       root.classList.add('theme-switching');
       var transition = document.startViewTransition(function () { applyThemeAttribute_(theme); commit(); });
       var nativeDone = false;
+      // O render() completo (pesado no celular) só roda quando o círculo termina: rodando junto, ele segurava o 1º quadro da
+      // animação (o botão afundava, travava e só depois o círculo começava).
+      var heavyDone = false;
+      var runHeavy = function () { if (!heavyDone && heavy) { heavyDone = true; heavy(); } };
       var done = function () {
         root.classList.remove('theme-switching');
         if (!nativeDone) { nativeDone = true; syncNativeTheme_(); }
+        runHeavy();
       };
       transition.finished.then(done, done);
       window.setTimeout(done, 1000); // aba escondida pode nunca terminar a foto
@@ -2323,8 +2312,7 @@
           { clipPath: ['circle(0px at ' + x + 'px ' + y + 'px)', 'circle(' + radius + 'px at ' + x + 'px ' + y + 'px)'] },
           { duration: 175, easing: 'cubic-bezier(0.22, 0.61, 0.36, 1)', pseudoElement: '::view-transition-new(root)' }
         );
-        if (heavy) window.setTimeout(heavy, 0);
-      }).catch(function () { if (heavy) heavy(); /* sem animação, o tema já trocou */ });
+      }).catch(function () { runHeavy(); /* sem animação, o tema já trocou */ });
       return;
     }
     // Sem View Transitions: as cores deslizam por um instante.
@@ -2456,23 +2444,39 @@
     if (r.width < 8 || r.height < 8) return;
     var before = getComputedStyle(btn).backgroundColor;
     var x = e.clientX || r.left + r.width / 2, y = e.clientY || r.top + r.height / 2;
+    // Tamanho de LAYOUT (offsetWidth/Height), não o da caixa na tela: o toque rápido solta o botão no meio do "afundar" (scale .86),
+    // e medir a caixa encolhida deixava a cópia menor que a cápsula de verdade (o texto parecia diminuir e crescer).
+    var bw = btn.offsetWidth || r.width, bh = btn.offsetHeight || r.height;
+    var startScale = parseFloat(getComputedStyle(btn).scale) || 1;
+    function placeCss_(rect, w, h, z) {
+      return 'position:fixed;z-index:' + z + ';margin:0;pointer-events:none;box-sizing:border-box;left:' + (rect.left + rect.width / 2 - w / 2) + 'px;top:' + (rect.top + rect.height / 2 - h / 2) +
+        'px;width:' + w + 'px;height:' + h + 'px;scale:1;transition:none;animation:none';
+    }
+    // Afundar → esticar GARANTIDO, mesmo no toque rápido: as cópias cobrem o botão de verdade (que fica escondido até o fim), então
+    // são elas que fazem o movimento, a partir de onde o afundar já estava.
+    var SINK_KEYS_ = [{ scale: startScale }, { scale: Math.min(startScale, 0.9), offset: 0.3 }, { scale: 1.05, offset: 0.7 }, { scale: 1 }];
     var ghost = btn.cloneNode(true);
     ghost.removeAttribute('id');
     ghost.setAttribute('aria-hidden', 'true');
     ghost.tabIndex = -1;
-    ghost.style.cssText = 'position:fixed;z-index:300;margin:0;pointer-events:none;box-sizing:border-box;left:' + r.left + 'px;top:' + r.top +
-      'px;width:' + r.width + 'px;height:' + r.height + 'px;scale:1;transition:none;animation:none';
+    ghost.style.cssText = placeCss_(r, bw, bh, 300);
     document.body.appendChild(ghost);
-    var done = false;
-    function finish() { if (!done) { done = true; ghost.remove(); } }
+    ghost.animate(SINK_KEYS_, { duration: 280, easing: 'ease-out' });
+    var hiddenBtn = btn.style.opacity;
+    btn.style.opacity = '0'; // opacity (não visibility): o botão não perde o foco do teclado
+    var done = false, t0 = performance.now();
+    function finish() { if (!done) { done = true; ghost.remove(); btn.style.opacity = hiddenBtn; } }
     setTimeout(function () {
       var cur = btn.isConnected ? btn : null;
       if (!cur) { // a lista foi redesenhada: acha o botão equivalente no mesmo lugar
         var at = document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2);
         cur = at && at.closest && at.closest('.capsule, button[aria-pressed]'); // a cópia tem pointer-events:none, não atrapalha
       }
-      if (!cur || getComputedStyle(cur).backgroundColor === before) { finish(); return; }
+      if (!cur || getComputedStyle(cur).backgroundColor === before) { setTimeout(finish, 280); return; } // sem cor nova: a cópia segue o movimento até o fim
+      if (cur !== btn) cur.style.opacity = '0';
       var cr = cur.getBoundingClientRect();
+      var cw = cur.offsetWidth || cr.width, ch = cur.offsetHeight || cr.height;
+      cr = { left: cr.left, top: cr.top, right: cr.right, bottom: cr.bottom, width: cr.width, height: cr.height };
       var rad = Math.ceil(Math.max(Math.hypot(x - cr.left, y - cr.top), Math.hypot(x - cr.right, y - cr.top),
         Math.hypot(x - cr.left, y - cr.bottom), Math.hypot(x - cr.right, y - cr.bottom)));
       // A cor NOVA nasce no ponto tocado e cresce até cobrir o botão: uma cópia do botão já mudado (clipada num círculo que cresce)
@@ -2481,13 +2485,14 @@
       fresh.removeAttribute('id');
       fresh.setAttribute('aria-hidden', 'true');
       fresh.tabIndex = -1;
-      fresh.style.cssText = 'position:fixed;z-index:301;margin:0;pointer-events:none;box-sizing:border-box;left:' + cr.left + 'px;top:' + cr.top +
-        'px;width:' + cr.width + 'px;height:' + cr.height + 'px;scale:1;transition:none;animation:none';
+      fresh.style.cssText = placeCss_(cr, cw, ch, 301);
       document.body.appendChild(fresh);
-      var cx = x - cr.left, cy = y - cr.top;
+      var cx = x - (cr.left + cr.width / 2 - cw / 2), cy = y - (cr.top + cr.height / 2 - ch / 2);
+      var ELAPSED_ = performance.now() - t0;
+      fresh.animate(SINK_KEYS_, { duration: 280, delay: -Math.min(ELAPSED_, 200), easing: 'ease-out' }); // mesmo movimento da cópia antiga, em sincronia
       fresh.animate([{ clipPath: 'circle(0px at ' + cx + 'px ' + cy + 'px)' }, { clipPath: 'circle(' + rad + 'px at ' + cx + 'px ' + cy + 'px)' }],
-        { duration: FILL_MS_, easing: FILL_EASING_, fill: 'forwards' }).onfinish = function () { fresh.remove(); finish(); };
-      setTimeout(function () { fresh.remove(); finish(); }, FILL_MS_ + 300);
+        { duration: FILL_MS_, easing: FILL_EASING_, fill: 'forwards' }).onfinish = function () { setTimeout(function () { fresh.remove(); if (cur !== btn) cur.style.opacity = ''; finish(); }, Math.max(0, 280 - FILL_MS_ - ELAPSED_)); };
+      setTimeout(function () { fresh.remove(); if (cur !== btn) cur.style.opacity = ''; finish(); }, 280 + 300);
     }, 0);
   }, true);
   // Brilho também ao PASSAR O MOUSE num card clicável (o toque abre menu/janela por cima e o brilho quase não era visto).
@@ -2546,57 +2551,6 @@
     }
   }
   var swipeRendering_ = false; // true só no render() que fecha a troca de aba por deslize (finishSwipeTransition_)
-  /** Foto de cada aba (cópia do DOM já pronto + gráficos viram imagem), tirada em silêncio um tempo depois de cada render.
-   *  A troca por deslize mostra essa foto no painel de entrada NA HORA e só desenha a aba de verdade quando o deslize termina:
-   *  o render da aba de destino (que no celular leva ~meio segundo) saiu do meio do gesto, que era o que "travava" o dedo
-   *  e mostrava só o fundo preto entre as abas. */
-  var viewSnapshots_ = {};
-  var viewSnapshotTimer_ = null;
-  function captureViewSnapshot_() {
-    viewSnapshotTimer_ = null;
-    if (document.getElementById('swipe-overlay')) return;
-    if (typeof swipe_ !== 'undefined' && swipe_) { scheduleViewSnapshot_(); return; } // dedo na tela: a cópia pesada espera
-    var root = document.getElementById('view-root');
-    if (!root || !root.firstChild) return;
-    var copy = root.cloneNode(true);
-    copy.removeAttribute('id');
-    copy.classList.remove('view-enter');
-    var live = root.querySelectorAll('canvas'), dead = copy.querySelectorAll('canvas');
-    for (var i = 0; i < live.length && i < dead.length; i++) {
-      var img = document.createElement('img');
-      try { img.src = live[i].toDataURL(); } catch (err) { /* canvas sem leitura: fica vazio na foto */ }
-      img.alt = '';
-      img.style.cssText = live[i].style.cssText;
-      if (!img.style.width) img.style.width = live[i].clientWidth + 'px';
-      if (!img.style.height) img.style.height = live[i].clientHeight + 'px';
-      dead[i].parentNode.replaceChild(img, dead[i]);
-    }
-    // Só o que cabe perto da tela: o painel do deslize só mostra a primeira tela, e clonar/pintar um Extrato inteiro a cada
-    // gesto era o que ainda travava o dedo no celular.
-    trimSnapshotBelow_(root, copy, window.scrollY + window.innerHeight * 2, 0);
-    viewSnapshots_[STATE.currentView] = copy;
-  }
-  /** Percorre a árvore viva e a cópia em paralelo (mesma forma) e apaga da cópia tudo que começa abaixo de `limitY` (coordenada da página). */
-  function trimSnapshotBelow_(live, copy, limitY, depth) {
-    if (depth > 6 || live.children.length !== copy.children.length) return;
-    var sy = window.scrollY;
-    for (var i = copy.children.length - 1; i >= 0; i--) {
-      var r = live.children[i].getBoundingClientRect();
-      if (r.height === 0 && r.top === 0) continue; // oculto / sem caixa: deixa como está
-      if (r.top + sy > limitY) copy.removeChild(copy.children[i]);
-      else if (r.bottom + sy > limitY) trimSnapshotBelow_(live.children[i], copy.children[i], limitY, depth + 1);
-    }
-  }
-  /** Reagenda a foto da aba atual: só tira quando a tela ficar quieta (contagens e entradas animadas já terminaram). */
-  function scheduleViewSnapshot_() {
-    if (viewSnapshotTimer_) clearTimeout(viewSnapshotTimer_);
-    viewSnapshotTimer_ = setTimeout(function () {
-      if (window.requestIdleCallback) requestIdleCallback(captureViewSnapshot_, { timeout: 1500 });
-      else captureViewSnapshot_();
-    }, 1500);
-  }
-  // Rolou: a foto (cortada perto da tela) precisa acompanhar -- tira de novo quando a rolagem para.
-  window.addEventListener('scroll', function () { if (!swipeRendering_ && !document.getElementById('swipe-overlay')) scheduleViewSnapshot_(); }, { passive: true });
   function motionAfterRender_(sameView) {
     if (!motionOk_ || swipeRendering_) return;
     var root = document.getElementById('view-root');
@@ -3316,6 +3270,14 @@
     var list = rootEl.querySelector('.dd-sheet-list');
     var search = rootEl.querySelector('.dd-sheet-search');
     var closed = false;
+    // Ao fechar, a página (e a janela de baixo, se houver) volta exatamente onde estava: abrir/fechar a folha nunca move a rolagem.
+    var pageY = window.scrollY || 0;
+    var scrollHost = anchorEl && anchorEl.closest ? anchorEl.closest('.modal, .modal-backdrop') : null;
+    var hostY = scrollHost ? scrollHost.scrollTop : 0;
+    function restoreScroll_() {
+      if (Math.abs((window.scrollY || 0) - pageY) > 0.5) window.scrollTo(window.scrollX || 0, pageY);
+      if (scrollHost && Math.abs(scrollHost.scrollTop - hostY) > 0.5) scrollHost.scrollTop = hostY;
+    }
     if (anchorEl && anchorEl.classList) anchorEl.classList.add('dd-btn', 'dd-open');
     function norm_(t) { return String(t || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase(); }
     function renderList_(q) {
@@ -3337,6 +3299,8 @@
       if (anchorEl && anchorEl.classList) anchorEl.classList.remove('dd-open');
       activeConfirmPopoverCleanup_ = null;
       rootEl.remove();
+      restoreScroll_();
+      requestAnimationFrame(restoreScroll_);
     }
     function close_() {
       if (closed) return;
@@ -3353,8 +3317,14 @@
     activeConfirmPopoverCleanup_ = cleanup_;
     renderList_('');
     if (search) search.addEventListener('input', function () { renderList_(search.value); });
+    // Centraliza a opção atual rolando SÓ a lista (scrollIntoView também rola a página e as janelas por trás da folha).
     var current = list.querySelector('.dd-sheet-option.active');
-    if (current) setTimeout(function () { try { current.scrollIntoView({ block: 'center' }); } catch (_) { /* navegador antigo */ } }, 0);
+    if (current) {
+      list.scrollTop = Math.max(0, current.offsetTop - Math.max(0, (list.clientHeight - current.offsetHeight) / 2));
+      setTimeout(function () {
+        list.scrollTop = Math.max(0, current.offsetTop - Math.max(0, (list.clientHeight - current.offsetHeight) / 2));
+      }, 0);
+    }
   }
 
   // ---------- campo de escolha do app (no lugar do <select> nativo) ----------
@@ -5106,7 +5076,6 @@
     updateScrollToTopVisibility_();
     updateReviewButton_();
     motionAfterRender_(sameView);
-    if (!swipeRendering_) scheduleViewSnapshot_();
   }
 
   // ---------- botão "voltar ao topo" (só no Extrato, por ora) ----------
@@ -5658,7 +5627,7 @@
     };
   }
   /**
-   * "Você economizou X desde o início": só depois de SAVED_MIN_DAYS_ dias de uso e cada medida só entra quando passa
+   * (Hoje sem lugar na tela: saiu do card do Saldo do ciclo em 20/11/2026, a ideia é reposicionar.) "Você economizou X desde o início": só depois de SAVED_MIN_DAYS_ dias de uso e cada medida só entra quando passa
    * de SAVED_MIN_AMOUNT_. opts = { today, start (início do engajamento ou null), monthlySurplus: {ym: sobra}, budgetsSavings }.
    *  - improvement: quanto a sobra mensal dos meses fechados depois dos 2 primeiros passou da média desses 2 (precisa de 3 meses fechados);
    *  - belowCaps: soma de (teto - gasto) dos orçamentos em cada ciclo fechado desde o início.
@@ -5738,7 +5707,7 @@
     return d(c.fromYmd) + ' a ' + d(c.toYmd);
   }
   /**
-   * Posições (em % da largura) dos gradientes curtos que marcam onde cada grupo de gastos COMEÇA na barra.
+   * Posições (em % da largura) onde cada grupo de gastos COMEÇA na barra (a sub-barra do grupo vai daí até o início do próximo; o triângulo fica no fim dela).
    * A barra é a receita do ciclo: o trecho cheio (sobra) fica à esquerda e o gasto, "vazio", à direita dele. Estourou o ciclo:
    * não há trecho cheio e os grupos se distribuem pela barra toda, proporcionais ao total gasto.
    */
@@ -5773,9 +5742,10 @@
     var marks = '';
     cycleSegmentFilters_ = [];
     model.segments.forEach(function (seg, i) {
-      // Gradiente curto: sai da cor do grupo no ponto em que ele começa e se dissolve na cor da barra (no máximo até o próximo grupo).
-      var nextPos = i + 1 < layout.marks.length ? layout.marks[i + 1] : 100;
-      marks += '<i class="cycle-mark" style="left:' + layout.marks[i].toFixed(2) + '%;--sw:' + Math.max(0.8, nextPos - layout.marks[i]).toFixed(2) + '%;--c:' + CYCLE_BALANCE_PALETTE_[i % CYCLE_BALANCE_PALETTE_.length] +
+      // Triângulo pequeno apontando pra esquerda, centrado na altura da barra, na extremidade DIREITA da "sub-barra" do grupo
+      // (o trecho que vai de onde o grupo começa até onde o próximo começa; o último vai até o fim da barra).
+      var rightEnd = i + 1 < layout.marks.length ? layout.marks[i + 1] : 100;
+      marks += '<i class="cycle-mark" style="--r:' + rightEnd.toFixed(2) + '%;--sw:' + Math.max(0.8, rightEnd - layout.marks[i]).toFixed(2) + '%;--c:' + CYCLE_BALANCE_PALETTE_[i % CYCLE_BALANCE_PALETTE_.length] +
         '" title="' + escapeHtml(seg.label + ': ' + fmtMoneyNoCents_(seg.amount)) + '"></i>';
       cycleSegmentFilters_.push({
         kind: 'expense', onlyAnalyzed: true, dateFrom: model.fromYmd, dateTo: model.toYmd, cycleLabels: seg.labels, cycleSegmentName: seg.label
@@ -5794,18 +5764,6 @@
       ? '<span class="amount-expense">-' + fmtMoneyNoCents_(-model.remaining) + '</span> <span class="muted">estourou o ciclo</span>'
       : fmtMoneyNoCents_(model.remaining) + ' <span class="muted">de ' + fmtMoneyNoCents_(model.start) + '</span>';
 
-    var saved = '';
-    var startYmd = budgetEngagementStart_();
-    var measures = savedSinceStart_({
-      today: today, start: startYmd,
-      monthlySurplus: monthlySurplusMap_(STATE.allTransactions, STATE.deletingIds, netAmountOfPassive_, netContributionOfActive_),
-      budgetsSavings: startYmd ? budgetsSavingsSinceStart_(startYmd, today) : null
-    });
-    var items = [];
-    if (measures.improvement !== null) items.push('<div><strong>' + fmtMoneyNoCents_(measures.improvement) + '</strong><span class="muted">sobra acima dos seus 2 primeiros meses</span></div>');
-    if (measures.belowCaps !== null) items.push('<div><strong>' + fmtMoneyNoCents_(measures.belowCaps) + '</strong><span class="muted">gasto abaixo dos tetos dos orçamentos</span></div>');
-    if (items.length) saved = '<div class="cycle-saved"><div class="cycle-saved-title">Você economizou desde o início</div><div class="cycle-saved-items">' + items.join('') + '</div></div>';
-
     var selOptions = cycles.map(function (c) {
       return { value: String(c.offset), label: (c.offset === 0 ? 'Atual · ' : '') + cycleRangeLabel_(c, today) };
     });
@@ -5819,7 +5777,6 @@
       '<div class="cycle-big">' + big + '</div>' +
       '<div class="cycle-bar-wrap"><div class="cycle-bar" role="img" aria-label="Saldo do ciclo">' + bar + marks + '</div></div>' +
       (legend ? '<div class="cycle-legend">' + legend + '</div>' : '<div class="muted" style="font-size:13px;margin-top:8px">Nada saiu ' + (offset === 0 ? 'ainda ' : '') + 'neste ciclo.</div>') +
-      saved +
     '</div>';
   }
 
@@ -8820,7 +8777,23 @@
   /** Rolagem guardada do Resumo desta tela (Extrato e Início têm a sua). */
   function calScrollKey_() { return txCalendarScope_ === 'home' ? 'homeCalendarScrollLeft' : 'txCalendarScrollLeft'; }
   function calDayTap_(date) {
-    if (txCalendarScope_ === 'home') return; // no Início não há lista por dia pra rolar
+    if (txCalendarScope_ === 'home') {
+      // Início: o Resumo leva ao dia no Extrato. O gráfico do Início ignora os filtros do Extrato; se o filtro atual
+      // esconderia o dia, ele é limpo (o gráfico mostrou o dia, então o Extrato também precisa mostrá-lo).
+      hideTooltip_();
+      var visibleInExtrato = STATE.allTransactions.concat(STATE.pendingTransactions).some(function (t) {
+        return t.date === date && txMatchesFilters(t, STATE.txFilters);
+      });
+      if (!visibleInExtrato) {
+        STATE.txFilters = {};
+        STATE.txCalendarScrollLeft = null;
+      }
+      STATE.txVisibleCount = Math.max(STATE.txVisibleCount || 0, TX_PAGE_SIZE);
+      STATE.currentView = 'transactions';
+      render();
+      scrollToTxDay_(date);
+      return;
+    }
     scrollToTxDay_(date);
   }
 
@@ -8909,8 +8882,9 @@
   /** Liga o cabeçalho (abre/fecha), a rolagem por arrasto e desenha o conteúdo do Resumo da tela. */
   function wireTxCalendarCard_(scope) {
     txCalendarScope_ = scope;
-    var expKey = scope === 'home' ? 'homeCalendarExpanded' : 'txCalendarExpanded';
+    var expKey = 'txCalendarExpanded'; // o do Início não colapsa (o clique no cabeçalho não faz nada nele)
     document.getElementById('tx-calendar-header').onclick = function () {
+      if (scope === 'home') return; // o Resumo do Início não colapsa (o do Extrato sim)
       STATE[expKey] = !STATE[expKey];
       document.getElementById('tx-calendar-collapse').style.gridTemplateRows = STATE[expKey] ? '1fr' : '0fr';
       document.getElementById('tx-calendar-chevron').style.transform = 'rotate(' + (STATE[expKey] ? '180deg' : '0deg') + ')';
@@ -8946,19 +8920,20 @@
   function buildTxCalendarHtml_(scope) {
     txCalendarScope_ = scope || 'extrato';
     var home = txCalendarScope_ === 'home';
-    var expanded = home ? STATE.homeCalendarExpanded : STATE.txCalendarExpanded;
+    var expanded = home ? true : STATE.txCalendarExpanded; // Início: sempre aberto, sem seta
     // Título + valores filtrados lado a lado (mesma estrutura do cabeçalho de "Filtrar
     // lançamentos" -- ver renderTransactions_ -- só que sem cápsulas, é texto corrido).
     return '<div class="card tx-calendar-card' + (home ? ' tx-calendar-home' : '') + '">' +
-      '<div id="tx-calendar-header" style="display:flex;justify-content:space-between;align-items:center;cursor:pointer;gap:8px">' +
+      '<div id="tx-calendar-header" style="display:flex;justify-content:space-between;align-items:center;cursor:' + (home ? 'default' : 'pointer') + ';gap:8px">' +
         '<div style="display:flex;align-items:center;gap:8px;min-width:0;flex:1">' +
           '<h2 style="margin:0;flex-shrink:0">Resumo</h2>' +
           '<div id="tx-calendar-filtered-stats" style="overflow:hidden;white-space:nowrap;text-overflow:ellipsis;min-width:0;font-size:12px;color:var(--text-muted)"></div>' +
         '</div>' +
         '<button type="button" id="tx-calendar-today" class="capsule cal-today-btn" tabindex="-1" aria-hidden="true">Hoje</button>' +
         '<div id="tx-calendar-mode" class="capsule-field"></div>' +
+        (home ? '<span id="tx-calendar-chevron" hidden></span>' :
         '<span id="tx-calendar-chevron" style="display:inline-block;color:var(--text-muted);transition:transform 200ms ease;flex-shrink:0;' +
-          'transform:rotate(' + (expanded ? '180deg' : '0deg') + ')">▾</span>' +
+          'transform:rotate(' + (expanded ? '180deg' : '0deg') + ')">▾</span>') +
       '</div>' +
       '<div id="tx-calendar-collapse" style="display:grid;grid-template-rows:' + (expanded ? '1fr' : '0fr') + ';transition:grid-template-rows 200ms ease">' +
         '<div style="overflow:hidden;min-height:0">' +
@@ -16600,22 +16575,16 @@
     if (editCardsBtn) editCardsBtn.hidden = view !== 'dashboard';
   }
 
-  /** Segunda metade do início da troca: põe no painel de entrada a FOTO da aba de destino (ou um esqueleto, se ela ainda não
-   *  foi aberta nesta sessão). Barato de propósito: o render de verdade só roda quando o deslize termina (finishSwipeTransition_),
+  /** Segunda metade do início da troca: põe no painel de entrada um esqueleto da aba de destino. Barato de propósito: o render de verdade só roda quando o deslize termina (finishSwipeTransition_),
    *  e nem roda se o gesto for desfeito. Idempotente; finishSwipeTransition_ também chama (se soltou antes de rodar). */
   function completeSwipeIncoming_(s) {
     if (!s.incomingPending) return;
     s.incomingPending = false;
+    // Sempre o esqueleto (aba "vazia"), nunca a foto da aba: a foto parecia a aba de verdade e, quando o deslize acabava, a
+    // cascata de entrada escondia tudo e recomeçava. Com o esqueleto, a cascata entra logo que o painel assenta.
     var holder = document.createElement('div');
     holder.className = 'swipe-snapshot';
-    var snap = viewSnapshots_[s.targetView];
-    if (snap) {
-      var pos = scrollPositions_[s.targetView] || { x: 0, y: 0 };
-      holder.style.marginTop = (-pos.y) + 'px';
-      holder.appendChild(snap.cloneNode(true));
-    } else {
-      holder.innerHTML = SWIPE_SKELETON_HTML_;
-    }
+    holder.innerHTML = SWIPE_SKELETON_HTML_;
     s.paneNew.appendChild(holder);
     swipePreviewChrome_(s.targetView);
     updateSwipeTransform_(s);
@@ -16733,7 +16702,6 @@
         scrollPositions_[s.originalView] = { x: s.scrollX0, y: s.scrollY0 };
         var restoreNew = scrollPositions_[s.targetView] || { x: 0, y: 0 };
         window.scrollTo(restoreNew.x, restoreNew.y);
-        scheduleViewSnapshot_(); // a aba que acabou de abrir também ganha foto (o render acima não agenda)
       } else {
         newViewRoot.remove();
         oldViewRoot.id = 'view-root';
@@ -17301,15 +17269,8 @@
     }
     return html;
   }
-  function treeArtClass_(view) {
-    if (view.stage <= 2) return 'tree-art tree-breath';
-    if (view.dryLevel === 3) return 'tree-art tree-still';
-    return 'tree-art';
-  }
-  function treeSway_(view) {
-    if (view.dryLevel === 2) return '0.6deg';
-    return view.stage <= 4 ? '1.6deg' : '1.1deg';
-  }
+  /** O círculo da figura fica parado (sem balanço nem respiração): só o vídeo dentro dele se mexe. */
+  function treeArtClass_() { return 'tree-art'; }
   function treeSeenGet_() { try { return localStorage.getItem(TREE_SEEN_KEY_) || ''; } catch (e) { return ''; } }
   function treeSeenSet_(file) { try { localStorage.setItem(TREE_SEEN_KEY_, file); } catch (e) { /* sem armazenamento: só não faz a transição */ } }
   function treeImgSrc_(file) { return TREE_IMG_BASE_ + file + '.webp'; }
@@ -17452,7 +17413,7 @@
     var pct = view.nextAt === null ? 100 : Math.max(0, Math.min(100, ((view.points - view.stageStart) / span) * 100));
     var html = '<div class="tree-modal" id="tree-modal">' +
       '<h2>Meu cacau</h2>' +
-      '<div class="tree-img-wrap" data-key="' + file + '|' + treeImageFilter_(view) + '|' + view.stage + '|' + view.dryLevel + '"><div class="' + treeArtClass_(view) + '" style="--sway:' + treeSway_(view) + '">' +
+      '<div class="tree-img-wrap" data-key="' + file + '|' + treeImageFilter_(view) + '|' + view.stage + '|' + view.dryLevel + '"><div class="' + treeArtClass_() + '">' +
         '<img id="tree-img"' + (changed ? ' class="tree-cur-fade"' : '') + ' alt="' + escapeHtml(stage.name) + '" src="' + treeImgSrc_(file) + '" style="filter:' + treeImageFilter_(view) + '">' +
         (changed ? '<img class="tree-prev" alt="" src="' + treeImgSrc_(prevFile) + '">' : '') +
         '<div class="tree-fx">' + treeFxHtml_(view) + '</div></div></div>' +
