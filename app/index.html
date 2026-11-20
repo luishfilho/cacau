@@ -505,6 +505,10 @@
     /* .fab.tree-fab (e não só .tree-fab): o position:relative de .fab vem depois no arquivo e empataria. */
     .fab.tree-fab, html[data-nav-side="left"] .fab.tree-fab { position: absolute; left: 0; right: auto; bottom: calc(100% + 8px); margin: 0; }
     html[data-nav-side="left"] .fab.tree-fab { left: auto; right: 0; }
+    /* Telas estreitas: o "+" (e o "para confirmar") sobem pra logo acima da barra, na mesma ponta onde fica o voltar ao topo;
+       ele sobe junto, pra ficar por cima deles em vez de em cima deles. */
+    :root { --stt-bottom: calc(var(--dock-bottom) + 122px); }
+    :root.has-review-fab { --stt-bottom: calc(var(--dock-bottom) + 174px); }
   }
   nav.tabbar {
     position: relative;
@@ -746,7 +750,7 @@
   .cycle-head { display: flex; justify-content: space-between; align-items: center; gap: 8px; margin-bottom: 2px; }
   .cycle-head h2 { margin-bottom: 0; }
   /* Seletor de ciclo no cabeçalho: compacto, à direita (o botão do app é largura total por padrão). */
-  .cycle-head button.app-select { width: auto; max-width: 62%; margin-bottom: 0; padding: 6px 10px; font-size: 13px; }
+  .cycle-head .cycle-select-btn { max-width: 62%; overflow: hidden; text-overflow: ellipsis; }
   .cycle-status { font-size: 13px; margin-bottom: 8px; }
   .cycle-big { font-size: 24px; font-weight: 600; margin-bottom: 10px; }
   .cycle-big .muted { font-size: 13px; font-weight: 400; }
@@ -783,9 +787,9 @@
     #edit-cards-btn { transition: height .25s cubic-bezier(.2,.8,.2,1), margin .25s ease, opacity .2s ease, transform .25s cubic-bezier(.34,1.4,.64,1), border-width .25s ease, scale .12s ease; }
   }
   html[data-nav-side="left"] #corner-stack { right: auto; left: 8px; }
-  /* Voltar ao topo fica acima da barra, no lado oposto ao dos botões (+ e para confirmar). */
-  #scroll-to-top-btn { right: auto; left: 12px; }
-  html[data-nav-side="left"] #scroll-to-top-btn { left: auto; right: 12px; }
+  /* Voltar ao topo fica acima da barra, no MESMO lado dos botões flutuantes (+ e para confirmar). */
+  #scroll-to-top-btn { left: auto; right: 12px; }
+  html[data-nav-side="left"] #scroll-to-top-btn { right: auto; left: 12px; }
 
   /* Janela do cacaueiro (botão ao lado da barra, ver openTreeModal_ em JavaScript.html): no meio da tela. */
   .modal-backdrop.modal-center { align-items: center; padding: 16px; }
@@ -989,8 +993,8 @@
     /* Lançamento: mesma ordem do PC. Valor grande; Parcelas só aparece (animada) quando a conta é cartão de crédito. */
     .tx-f-amount { gap: 0 !important; align-items: flex-end; }
     .tx-f-amount > div:first-child { flex: 1 1 0 !important; }
-    /* Valor e Parcelas: mesma fonte e mesma altura (as larguras é que diferem). */
-    .tx-f-amount input { font-size: 24px; font-weight: 600; padding: 12px 14px; box-sizing: border-box; height: 56px; margin-bottom: 0; }
+    /* Valor e Parcelas: mesma fonte e mesmo padding do PC, então a mesma altura (as larguras é que diferem). */
+    .tx-f-amount input { font-size: 24px; font-weight: 600; box-sizing: border-box; margin-bottom: 0; }
     .tx-f-amount > .tx-inst-col { flex: 0 0 0 !important; margin-left: 0; opacity: 0; overflow: hidden; visibility: hidden; }
     .tx-f-amount.has-inst > .tx-inst-col { flex: 0 0 96px !important; margin-left: 10px; opacity: 1; overflow: visible; visibility: visible; }
     .tx-f-amount .field-action-group { flex-wrap: wrap; gap: 0 10px; min-width: 0; max-width: 100%; }
@@ -998,8 +1002,8 @@
     /* Título do campo bem mais forte que as perguntas de ação ("Lembrar categoria?", "Reembolso?"). */
     .modal .field label { font-size: 14px; font-weight: 600; color: var(--text); }
     .modal .field-action-link { font-size: 12px; }
-    /* Campos de texto com altura confortável pro toque; 16px evita o zoom automático do iOS ao focar. */
-    .modal input, .modal select, .modal textarea { font-size: 16px; min-height: 44px; }
+    /* Campos de texto: mesmo padding interno do PC (só a fonte de 16px muda, pra evitar o zoom automático do iOS ao focar). */
+    .modal input, .modal select, .modal textarea { font-size: 16px; }
   }
   @media (max-width: 640px) and (prefers-reduced-motion: no-preference) {
     .tx-f-amount > div:first-child, .tx-f-amount > .tx-inst-col {
@@ -1359,13 +1363,11 @@
     border-left: 2px solid transparent; border-right: 2px solid transparent;
     border-bottom: 4px solid var(--bar-color);
   }
-  /* Metas diárias, por célula: mês pontilhada e fina, semana tracejada e mais grossa, por
-     cima das barras; a célula do domingo tem o respiro de 8px, então a linha da semana
-     quebra naturalmente entre uma semana e outra. */
+  /* Meta diária, por célula: UMA linha pontilhada (o teto da semana) por cima das barras, na cor do veredito da semana; a
+     célula do domingo tem o respiro de 8px, então a linha quebra naturalmente entre uma semana e outra. */
   .day-bar-target { position: absolute; left: 0; right: 0; height: 0; pointer-events: none; z-index: 2; }
-  .day-bar-target-month { border-top: 2px dotted var(--text-muted); z-index: 3; }
-  .day-bar-target-week { border-top: 3px dashed var(--text); }
-  /* Veredito do trecho (ver dayBarsTargetStatus_): cor da linha, mês e semana à parte. */
+  .day-bar-target-week { border-top: 2px dotted var(--text-muted); z-index: 3; }
+  /* Veredito da semana (ver dayBarsTargetStatus_): cor da linha. */
   .day-bar-target-ok { border-top-color: var(--income); }
   .day-bar-target-warn { border-top-color: var(--warning); }
   .day-bar-target-bad { border-top-color: var(--expense); }
@@ -1517,6 +1519,8 @@
     pointer-events: none;
     max-width: min(280px, calc(100vw - 24px));
   }
+  /* Tooltip que é um atalho (círculos de orçamento): recebe o mouse/toque e leva ao Extrato. */
+  .shared-tooltip-action { pointer-events: auto; cursor: pointer; }
   /* Descrição de categoria escrita pelo usuário — itálico pra separar do texto do app. */
   .shared-tooltip-italic { font-style: italic; }
   /* Dica que some sozinha (ver openFeedbackModal_): o fade dura o último meio segundo dos 3 s. */
@@ -1532,6 +1536,8 @@
   .shared-tooltip-rich .tt-trio { display: grid; grid-template-columns: 1fr auto 1fr; gap: 12px; }
   .shared-tooltip-rich .tt-trio > span:last-child { text-align: right; }
   .shared-tooltip-rich .tt-result { text-align: center; font-weight: 700; margin-top: 2px; }
+  /* Dica de ação no fim (mesmo estilo de "Clique para adicionar um plano" do gráfico de saldo): itálico, em negrito. */
+  .shared-tooltip-rich .tt-hint { text-align: center; font-style: italic; font-weight: 700; opacity: .75; margin-top: 6px; }
   .shared-tooltip-rich .tt-ok { color: #4ade80; }
   .shared-tooltip-rich .tt-warn { color: #fbbf24; }
   .shared-tooltip-rich .tt-bad { color: #f87171; }
@@ -1576,10 +1582,6 @@
   }
   .time-pin-label.flip { transform: translateX(calc(-100% - 10px)); }
 
-  /* Plano de recuperação de estouro (ver budgetRecoveryState_): uma linha pequena colada
-     embaixo da barra, "Economizando até dia ..." -- puxada pra cima pra encostar na
-     barra (a margem de baixo dela é 6px) e devolver o respiro no fim. */
-  .budget-recovery-note { font-size: 11px; color: var(--text-muted); margin: -3px 0 8px 2px; }
   /* Círculos de ciclo (ver budgetCircleSeries_): um por ciclo FECHADO e o último é o ciclo em
      andamento -- um anel que enche conforme o gasto (--p, 0-100) na cor do status atual.
      Mesma linguagem das bolinhas dos recorrentes (.forecast-dot): 15px de diâmetro maiores
@@ -1588,18 +1590,20 @@
   /* Cada orçamento é um subcard (retângulo arredondado), pra ficar claro a qual orçamento cada grupo de círculos
      pertence; sai 6px pra fora do respiro do card pra não encolher demais o texto no celular. */
   .budget-circles-row { padding: 10px 10px 10px; margin: 0 -6px 8px; background: var(--bg); border-radius: 12px; cursor: pointer; }
-  .budget-circles-row .budget-recovery-note { margin: 6px 0 0; }
   /* Nome | 8 slots de círculo | texto de aviso: COLUNAS FIXAS (grid), iguais em todas as linhas, então o x de
      cada slot e o do texto não dependem do tamanho do nome nem do texto. Os slots (8 x 16px + 7 x 3px = 149px)
      nunca encolhem; o texto fica à direita (alinhado à direita, largura fixa, no máximo 2 linhas). Em tela
      estreita (até 520px) o nome ocupa a linha de cima e círculos + texto ficam embaixo, nas mesmas 2 colunas
      em todas as linhas -- cabe nos ~310px de um celular sem rolagem lateral. */
-  .budget-circles-row { --budget-track-w: 149px; --budget-advice-w: 170px; }
+  .budget-circles-row { --budget-track-w: 149px; --budget-advice-w: 200px; }
   .budget-circles-head { display: grid; grid-template-columns: minmax(0, 1fr) var(--budget-track-w) var(--budget-advice-w); align-items: center; column-gap: 10px; }
-  .budget-circles-head .budget-timebar-name { min-width: 0; white-space: nowrap; }
+  /* O título quebra em várias linhas se precisar (centralizado na vertical com o resto da linha, pelo align-items do grid) e nunca
+     invade a coluna do lado: o ícone fica fixo e o texto se ajusta dentro da coluna. */
+  .budget-circles-head .budget-timebar-name { min-width: 0; display: flex; align-items: center; gap: 6px; overflow: visible; text-overflow: clip; white-space: normal; overflow-wrap: anywhere; line-height: 1.25; }
+  .budget-circles-head .budget-timebar-name > svg, .budget-circles-head .budget-timebar-name > .cat-icon { flex: none; }
   .budget-circles-advice {
     min-width: 0; font-size: 12px; line-height: 1.3; color: var(--text-muted); text-align: right;
-    display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; line-clamp: 2; overflow: hidden;
+    display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 3; line-clamp: 3; overflow: hidden;
   }
   @media (max-width: 520px) {
     .budget-circles-head { grid-template-columns: var(--budget-track-w) minmax(0, 1fr); grid-template-areas: "name name" "track advice"; row-gap: 4px; }
@@ -1633,7 +1637,7 @@
   .budget-ring path, .budget-ring circle { fill: none; stroke-width: 3; stroke-linecap: round; }
   .budget-ring .bc-track { stroke: color-mix(in srgb, var(--text-muted) 28%, var(--bg)); }
   .budget-ring .bc-fill { stroke: var(--c); }
-  .budget-circle-comp { box-shadow: inset 0 0 0 3px var(--income); }
+  .budget-ring .bc-recov { stroke: var(--income); stroke-linecap: butt; }
   /* Slot ANTES do 1º ciclo do orçamento: só um contorno bem discreto (sem preenchimento, não clicável). */
   .budget-circle-blank { background: transparent; box-shadow: inset 0 0 0 1px var(--border); opacity: 0.7; cursor: default; }
   .budget-plan-row { flex-wrap: wrap; row-gap: 8px; }
@@ -1672,11 +1676,13 @@
   .budget-value-side .kind-toggle { flex-direction: column; gap: 4px; margin: 0; }
   .budget-value-side .kind-toggle button { padding: 4px 0; font-size: 10px; white-space: nowrap; overflow: hidden; }
   .budget-value-side .budget-switch { flex-direction: row; align-items: center; justify-content: center; gap: 8px; min-height: 0; margin: 0; font-size: 13px; line-height: 1.25; }
-  .budget-value-side .budget-switch span { flex: 0 1 auto; min-width: 0; text-align: left; overflow-wrap: anywhere; }
+  .budget-value-side .budget-switch span { flex: 0 1 auto; min-width: 0; text-align: left; overflow-wrap: break-word; word-break: normal; hyphens: auto; }
   .budget-start-step:disabled { opacity: 0.4; cursor: default; }
+  .budget-switch > span { min-width: 0; overflow-wrap: break-word; }
   .budget-switch { display: flex; align-items: center; justify-content: space-between; gap: 8px; min-height: 28px; margin: 8px 0 0; font-size: 11px; line-height: 1.25; cursor: pointer; }
   .budget-switch.is-hidden { visibility: hidden; pointer-events: none; }
-  .budget-switch input, .settings-switch input { -webkit-appearance: none; appearance: none; position: relative; flex: 0 0 auto; width: 36px; min-width: 36px; height: 20px; margin: 0; padding: 0; border: none; border-radius: 999px; background: var(--border); cursor: pointer; transition: background 0.15s; }
+  /* O interruptor NUNCA espreme: tamanho fixo (36x20) mesmo com o texto ao lado quebrando em várias linhas. */
+  .budget-switch input, .settings-switch input { -webkit-appearance: none; appearance: none; position: relative; box-sizing: border-box; flex: 0 0 36px; width: 36px; min-width: 36px; max-width: 36px; height: 20px; min-height: 20px; max-height: 20px; margin: 0; padding: 0; border: none; border-radius: 999px; background: var(--border); cursor: pointer; transition: background 0.15s; }
   .budget-switch input::after, .settings-switch input::after { content: ''; position: absolute; top: 2px; left: 2px; width: 16px; height: 16px; border-radius: 50%; background: #fff; transition: transform 0.15s; }
   .budget-switch input:checked, .settings-switch input:checked { background: var(--primary); }
   .budget-switch input:checked::after, .settings-switch input:checked::after { transform: translateX(16px); }
@@ -1970,6 +1976,7 @@
     .toast.toast-fade-out { transform: translateY(-26px); }
     @keyframes toast-drop { from { transform: translateY(-70px); opacity: 0; } }
     /* Números e barras C · os anéis do orçamento se desenham ao entrar na aba. */
+    .view-enter .budget-ring .bc-recov { stroke-dasharray: 1 1; animation: ring-draw 1.1s cubic-bezier(.4,0,.2,1) .25s backwards; }
     .view-enter .budget-ring .bc-fill { stroke-dasharray: 1 1; animation: ring-draw .9s cubic-bezier(.34,1.3,.64,1) backwards; }
     @keyframes ring-draw { from { stroke-dashoffset: 1; } }
   }
@@ -5097,9 +5104,10 @@
     btn.type = 'button';
     btn.id = 'scroll-to-top-btn';
     btn.title = 'Voltar ao topo';
-    btn.textContent = '↑';
-    btn.style.cssText = 'position:fixed;bottom:calc(var(--dock-bottom) + 70px);width:44px;height:44px;border-radius:50%;' +
-      'font-size:20px;line-height:1;box-shadow:0 4px 10px rgba(0,0,0,0.25);opacity:0;pointer-events:none;' +
+    // Seta grossa (chevron) igual à do cursor das margens que trocam de aba (ver marginArrowSvg_/marginCursorCss_), apontando pra cima.
+    btn.innerHTML = '<svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 15l6-6 6 6"/></svg>';
+    btn.style.cssText = 'position:fixed;bottom:var(--stt-bottom, calc(var(--dock-bottom) + 70px));width:44px;height:44px;border-radius:50%;' +
+      'display:flex;align-items:center;justify-content:center;padding:0;box-shadow:0 4px 10px rgba(0,0,0,0.25);opacity:0;pointer-events:none;' +
       'transition:opacity .15s ease;z-index:40';
     document.body.appendChild(btn);
     btn.onclick = function () { window.scrollTo({ top: 0, behavior: 'smooth' }); };
@@ -5116,6 +5124,16 @@
       if (a.type === 'credit_card') { credit += a.balance; cards++; } else cash += a.balance;
     });
     return { cash: cash, credit: credit, total: cash + credit, hasCards: cards > 0 };
+  }
+  /** Ordem das contas no card Contas do Início: não-cartões antes dos cartões de crédito; dentro de cada grupo, saldo decrescente
+   *  (empate = ordem original, o sort é estável). Não mexe na lista original. */
+  function sortAccountsForHome_(accounts) {
+    return accounts.map(function (a, i) { return { a: a, i: i }; }).sort(function (x, y) {
+      var cx = x.a.type === 'credit_card' ? 1 : 0, cy = y.a.type === 'credit_card' ? 1 : 0;
+      if (cx !== cy) return cx - cy;
+      if (y.a.balance !== x.a.balance) return y.a.balance - x.a.balance;
+      return x.i - y.i;
+    }).map(function (o) { return o.a; });
   }
   function accountsSummaryHtml_(accounts) {
     var sm = accountsSummary_(accounts);
@@ -5243,12 +5261,47 @@
     if (hour < 18) return 'afternoon';
     return 'evening';
   }
+  var HOME_BAG_KEY_ = 'financas-home-bag-'; // por aparelho: a rodada de frases continua de onde parou mesmo fechando o app
+  /** Sacola embaralhada: cada rodada é uma permutação aleatória (Fisher-Yates) de TODAS as frases do conjunto; cada abertura tira a
+   *  próxima da fila, então nenhuma frase reaparece antes de todas as outras terem saído uma vez. Quando a fila acaba, nova rodada
+   *  (e a 1ª dela nunca é igual à última exibida). Sem nome cadastrado, as frases com {nome} ficam na fila, intocadas, até haver
+   *  nome; se só sobrarem frases inutilizáveis, a rodada fecha e outra começa. Frases que saíram do código somem da fila. */
+  function homeBagDraw_(key, pool, name, rand, avoid) {
+    var r = rand || Math.random;
+    var bag = [];
+    try { bag = JSON.parse(localStorage.getItem(HOME_BAG_KEY_ + key)) || []; } catch (e) { bag = []; }
+    if (!Array.isArray(bag)) bag = [];
+    bag = bag.filter(function (p) { return pool.indexOf(p) !== -1; });
+    function usableAt() {
+      for (var i = 0; i < bag.length; i++) if (name || bag[i].indexOf('{nome}') === -1) return i;
+      return -1;
+    }
+    var at = usableAt();
+    if (at === -1) {
+      bag = pool.slice();
+      for (var i = bag.length - 1; i > 0; i--) {
+        var j = Math.floor(r() * (i + 1)), t = bag[i]; bag[i] = bag[j]; bag[j] = t;
+      }
+      var first = -1;
+      bag.some(function (p, k) { if (name || p.indexOf('{nome}') === -1) { first = k; return true; } return false; });
+      if (first !== -1 && bag[first] === avoid) { // 1ª da nova rodada = a última da anterior: troca com a próxima utilizável
+        for (var m = first + 1; m < bag.length; m++) {
+          if (name || bag[m].indexOf('{nome}') === -1) { var x = bag[first]; bag[first] = bag[m]; bag[m] = x; break; }
+        }
+      }
+      at = usableAt();
+    }
+    if (at === -1) return '';
+    var raw = bag.splice(at, 1)[0];
+    try { localStorage.setItem(HOME_BAG_KEY_ + key, JSON.stringify(bag)); } catch (e) { /* sem armazenamento: a rodada vale só até recarregar */ }
+    return raw;
+  }
   /** Sorteia uma frase do conjunto; sem nome cadastrado, as com {nome} saem do sorteio.
    *  O ícone da frase vem do marcador "{i:nome}" no começo ("sky" = sol de dia, fase da lua à noite) e sai do texto. */
-  function pickHomeMessage_(pool, name, now, rand, avoid) {
+  function pickHomeMessage_(pool, name, now, rand, avoid, bagKey) {
     var usable = pool.filter(function (p) { return name || p.indexOf('{nome}') === -1; });
     if (avoid && usable.length > 1) usable = usable.filter(function (p) { return p !== avoid; });
-    var raw = usable[Math.floor((rand || Math.random)() * usable.length)] || '';
+    var raw = bagKey ? homeBagDraw_(bagKey, pool, name, rand, avoid) : (usable[Math.floor((rand || Math.random)() * usable.length)] || '');
     var hour = now.getHours();
     var icon = '';
     var withoutIcon = raw.replace(/^\{i:(\w+)\}\s*/, function (m, n) { icon = n; return ''; });
@@ -5261,7 +5314,7 @@
     var now = new Date();
     var name = userFirstName_();
     var pool = homeMsg_.greeted ? HOME_ENGAGEMENT_ : HOME_GREETINGS_[homeGreetingBand_(now.getHours())];
-    var pick = pickHomeMessage_(pool, name, now, null, homeMsg_.raw);
+    var pick = pickHomeMessage_(pool, name, now, null, homeMsg_.raw, homeMsg_.greeted ? 'engagement' : 'greeting-' + homeGreetingBand_(now.getHours()));
     homeMsg_ = { greeted: true, raw: pick.raw, text: pick.text, icon: pick.icon, date: pick.date, animate: true };
   }
   /** HTML da mensagem acima do 1º card; o fade-in só toca na entrada (não em re-render da mesma aba). */
@@ -5438,7 +5491,8 @@
       return;
     }
 
-    var accountsHtml = d.accounts.filter(function (a) { return a.type !== 'investment'; }).map(function (a) {
+    // Contas correntes (e demais que não são cartão) primeiro, depois os cartões; em cada grupo, do maior saldo para o menor.
+    var accountsHtml = sortAccountsForHome_(d.accounts.filter(function (a) { return a.type !== 'investment'; })).map(function (a) {
       // Saldo em cor neutra (nunca verde/vermelho: o saldo de conta não é "ganho" nem "perda"); o tipo vira ícone.
       return '<div class="row"><span>' + accountTypeIconHtml_(a.type) + accountNameHtml_(a.name, a.colorIndex) + '</span>' +
         '<span>' + fmtMoney(a.balance) + '</span></div>';
@@ -5495,8 +5549,13 @@
     document.querySelectorAll('.cycle-seg-link').forEach(function (el) {
       el.onclick = function () { openCycleExtratoWith_(cycleSegmentFilters_[Number(el.getAttribute('data-cycle-seg'))]); };
     });
-    var cycleSelect = document.getElementById('cycle-select');
-    if (cycleSelect) cycleSelect.onchange = function (e) { STATE.cycleOffset = Number(e.target.value) || 0; STATE.cycleAnimate = true; render(); };
+    // Mesma cápsula com seta dos filtros de Estabelecimentos (capsule dd-btn + openDropdownMenu_).
+    var cycleBtn = document.getElementById('cycle-select');
+    if (cycleBtn) cycleBtn.onclick = function () {
+      var btn = this;
+      var opts = JSON.parse(btn.getAttribute('data-options') || '[]');
+      openDropdownMenu_(btn, opts, function (v) { STATE.cycleOffset = Number(v) || 0; STATE.cycleAnimate = true; render(); });
+    };
     setupBudgetBarMenus_(root);
 
     document.querySelectorAll('#view-root [data-tx]').forEach(function (el) {
@@ -5772,7 +5831,9 @@
     STATE.cycleAnimate = false; // só a troca de ciclo anima a barra de novo (entrar na aba já anima por .view-enter)
     return '<div class="card cycle-card' + (animate ? ' cycle-anim' : '') + '">' +
       '<div class="cycle-head"><h2>Saldo do ciclo</h2>' +
-        (cycles.length > 1 ? appSelectHtml_('cycle-select', selOptions, String(offset)) : '') + '</div>' +
+        (cycles.length > 1 ? '<button type="button" class="capsule dd-btn cycle-select-btn" id="cycle-select" data-options="' +
+          escapeHtml(JSON.stringify(selOptions.map(function (o) { return { value: o.value, label: o.label, selected: o.value === String(offset) }; }))) + '">' +
+          escapeHtml((selOptions.filter(function (o) { return o.value === String(offset); })[0] || selOptions[0]).label) + ' <span class="dd-chev">▾</span></button>' : '') + '</div>' +
       '<div class="muted cycle-status">' + (cycles.length > 1 ? '' : 'de ' + fmtDateShort_(model.fromYmd) + ' a ' + fmtDateShort_(model.toYmd) + ' · ') + status + '</div>' +
       '<div class="cycle-big">' + big + '</div>' +
       '<div class="cycle-bar-wrap"><div class="cycle-bar" role="img" aria-label="Saldo do ciclo">' + bar + marks + '</div></div>' +
@@ -8543,8 +8604,9 @@
         // neutra de sempre.
         var st = targets.status || { month: {}, week: {} };
         var tone = function (v) { return v ? ' day-bar-target-' + v : ''; };
-        targetHtml = '<div class="day-bar-target day-bar-target-month' + tone(st.month[dateStr]) + '" style="bottom:' + pct(targets.month[dateStr]) + '%"></div>' +
-          '<div class="day-bar-target day-bar-target-week' + tone(st.week[dateStr]) + '" style="bottom:' + pct(targets.week[dateStr]) + '%"></div>';
+        // Uma linha só (pontilhada): o teto da SEMANA, colorido pelo veredito de cada semana. A linha do mês saiu do desenho (poluía),
+        // mas o mês segue no tooltip (média × teto e veredito).
+        targetHtml = '<div class="day-bar-target day-bar-target-week' + tone(st.week[dateStr]) + '" style="bottom:' + pct(targets.week[dateStr]) + '%"></div>';
         if (clickable) {
           var avg = (targets.status && targets.status.avg) || { month: {}, week: {} };
           var monthName = MONTH_NAMES_PT[Number(dateStr.slice(5, 7)) - 1];
@@ -10655,7 +10717,11 @@
       if (r.title !== undefined) return '<div class="tt-title">' + escapeHtml(r.title) + '</div>';
       if (r.result !== undefined) return '<div class="tt-result tt-' + r.tone + '">' + (r.tone === 'ok' ? BALANCE_GOAL_REACHED_ICON_ : DAY_BARS_RESULT_ICONS_[r.tone]) + escapeHtml(r.result) + '</div>';
       return '<div class="tt-row"><span>' + escapeHtml(r.label) + '</span><span class="tt-val">' + escapeHtml(r.value) + '</span></div>';
-    }).join('');
+    }).join('') + '<div class="tt-hint">' + budgetCircleHintText_() + '</div>';
+  }
+  /** Dica no fim do tooltip do círculo: clicar/tocar nele abre o Extrato filtrado (ver wireBudgetCircles_). */
+  function budgetCircleHintText_() {
+    return (typeof HOVER_CAPABLE_ !== 'undefined' && !HOVER_CAPABLE_ ? 'Toque' : 'Clique') + ' para ver os lançamentos';
   }
   var BUDGET_RING_R_ = 6.5;          // raio do traço (círculo de 16px, traço de 3px)
   var BUDGET_RING_GAP_DEG_ = 22;     // meia abertura do corte do "hoje": ~2px visíveis entre as pontas arredondadas
@@ -10702,6 +10768,15 @@
       budgetRingArcs_(budgetRingSubtract_([[0, pct * 3.6]], gaps), 'bc-fill') +
     '</svg>';
   }
+  /** Anel VERDE de recuperação por dentro de um círculo vermelho (ciclo fechado que estourou): o arco cresce
+   *  (a partir do topo, no sentido horário) conforme o estouro vai sendo compensado pela economia dos ciclos
+   *  seguintes (frac = compensado ÷ estouro, 0-1) e FECHA o anel inteiro quando a recuperação se completa.
+   *  Mesma geometria do antigo box-shadow inset de 3px, então o anel fechado fica idêntico ao que já era. */
+  function budgetRecoveryRingHtml_(frac) {
+    var deg = Math.max(0, Math.min(1, frac)) * 360;
+    return '<svg class="budget-ring budget-ring-recov" viewBox="0 0 16 16" width="16" height="16" aria-hidden="true">' +
+      budgetRingArcs_([[0, deg]], 'bc-recov') + '</svg>';
+  }
   /** Um círculo (<button>, pra clicar nele nunca disparar o clique da linha): cor = status; o
    *  em andamento é um anel que enche conforme o gasto, colorido pelo RITMO (gasto x esperado até hoje) e com um
    *  corte na posição de hoje (ver budgetRingSvgHtml_); estouro 100%
@@ -10711,9 +10786,11 @@
     var pct = c.partial ? Math.round(Math.min(1, isFinite(c.ratio) ? c.ratio : 1) * 100) : 100;
     return '<button type="button" class="' + classes + '" style="--p:' + pct + '"' +
       ' aria-label="' + escapeHtml(budgetCircleTooltipTitle_(c)) + '"' +
+      ' data-from="' + c.cycle.fromYmd + '" data-to="' + c.cycle.toYmd + '"' +
       ' data-tooltip="' + escapeHtml(budgetCircleTooltipPlain_(c)) + '"' +
       ' data-tooltip-html="' + escapeHtml(budgetCircleTooltipHtml_(c)) + '">' +
-      (c.partial ? budgetRingSvgHtml_(pct, c.cycle.days > 1 ? c.elapsedFrac : null) : '') + '</button>';
+      (c.partial ? budgetRingSvgHtml_(pct, c.cycle.days > 1 ? c.elapsedFrac : null)
+        : (c.overshoot > 0.005 && c.compensated > 0.005 ? budgetRecoveryRingHtml_(c.fullyCompensated ? 1 : c.compensated / c.overshoot) : '')) + '</button>';
   }
   /** Faixa de BUDGET_CIRCLES_SHOWN_ slots de largura fixa (o x de cada slot é o mesmo em todas as linhas):
    *  os círculos reais ficam à direita (o último é o ciclo atual) e os slots antes do 1º ciclo são só um
@@ -10724,16 +10801,50 @@
     for (var i = series.circles.length; i < BUDGET_CIRCLES_SHOWN_; i++) blanks += '<span class="budget-circle budget-circle-blank" aria-hidden="true"></span>';
     return '<span class="budget-circles-track">' + blanks + series.circles.map(budgetCircleHtml_).join('') + '</span>';
   }
-  /** Clique/toque num círculo: tooltip por 15 s (showTooltipForTap_) ou até clicar fora. O clique
-   *  nunca sobe pra linha (que abriria o Extrato/o modal de editar). Chamada de novo a cada
+  /** Tooltip do círculo: com mouse abre ao passar por cima (e some ao sair, com uma folga pra dar tempo de ir até
+   *  ele); no toque, abre ao tocar e fica 15 s ou até tocar fora. Clicar/tocar no PRÓPRIO tooltip (que termina
+   *  com "Clique/Toque para ver os lançamentos") abre o Extrato filtrado pelo orçamento e pelo ciclo daquele
+   *  círculo. O clique no círculo nunca sobe pra linha (que abre o modal de editar). Chamada de novo a cada
    *  render (os elementos são recriados). */
+  var budgetTipHideTimer_ = null;
+  var BUDGET_TIP_LEAVE_MS_ = 260;
   function wireBudgetCircles_(root) {
+    function cancelHide_() { if (budgetTipHideTimer_) { clearTimeout(budgetTipHideTimer_); budgetTipHideTimer_ = null; } }
+    function scheduleHide_() {
+      cancelHide_();
+      budgetTipHideTimer_ = setTimeout(function () { budgetTipHideTimer_ = null; hideTooltip_(); }, BUDGET_TIP_LEAVE_MS_);
+    }
     root.querySelectorAll('button.budget-circle').forEach(function (el) {
+      function go_() {
+        var row = el.closest('[data-budget-bar]');
+        var b = row && STATE.budgets.find(function (x) { return x.id === row.dataset.budgetBar; });
+        hideTooltip_();
+        if (stopTooltipOutsideClick_) { stopTooltipOutsideClick_(); stopTooltipOutsideClick_ = null; }
+        if (b) viewBudgetTransactions_(b, { fromYmd: el.getAttribute('data-from'), toYmd: el.getAttribute('data-to') });
+      }
+      function show_(sticky) {
+        cancelHide_();
+        var opts = { html: el.getAttribute('data-tooltip-html') || '' };
+        if (sticky) showTooltipForTap_(el, el.getAttribute('data-tooltip') || '', opts);
+        else showTooltip_(el, el.getAttribute('data-tooltip') || '', opts);
+        var tip = document.getElementById('shared-tooltip');
+        if (!tip) return null;
+        tip.classList.add('shared-tooltip-action');
+        tip.onclick = function (e) { e.stopPropagation(); go_(); };
+        tip.onmouseenter = cancelHide_;
+        tip.onmouseleave = scheduleHide_;
+        return tip;
+      }
+      if (HOVER_CAPABLE_) {
+        el.addEventListener('mouseenter', function () { show_(false); });
+        el.addEventListener('mouseleave', scheduleHide_);
+      }
       el.addEventListener('click', function (e) {
         e.stopPropagation();
         if (stopTooltipOutsideClick_) { stopTooltipOutsideClick_(); stopTooltipOutsideClick_ = null; }
-        showTooltipForTap_(el, el.getAttribute('data-tooltip') || '', { html: el.getAttribute('data-tooltip-html') || '' });
-        var stop = dismissOnOutsideClick(el, function () {
+        var tip = show_(true);
+        // "Fora" = nem o círculo nem o tooltip (senão o toque no tooltip o fecharia antes do clique chegar nele).
+        var stop = dismissOnOutsideClick({ contains: function (t) { return el.contains(t) || (tip && tip.contains(t)); } }, function () {
           hideTooltip_();
           stop();
           if (stopTooltipOutsideClick_ === stop) stopTooltipOutsideClick_ = null;
@@ -10987,13 +11098,16 @@
    * Texto de aviso do orçamento (sempre visível na barra, ver buildBudgetTimelineHtml/
    * budgetAdvisoryHtml_) pro intervalo [fromYmd, toYmd] -- o CICLO atual, ou o mês atual
    * escolhido no seletor. "Dentro"/"Próximo" do limite (progress.status 'ok'/'atencao'):
-   * "Gastar no máximo R$ X", com X = 95% do limite − gasto (o teto de economia, se há
-   * plano de recuperação, já vem em progress.limit), ou "Evitar gastos" quando X nem
+   * "Gastar no máximo R$ X essa semana / R$ Y por dia" (ou "... R$ Y hoje" no último dia da
+   * semana/do ciclo), com o RESTANTE = 95% do limite − gasto (o teto de economia, se há
+   * plano de recuperação, já vem em progress.limit) dividido pelos dias que restam: Y = restante ÷ dias
+   * que faltam no ciclo, X = Y × dias que faltam na semana (limitada ao ciclo); sempre sem centavos,
+   * pra baixo. Ou "Evitar gastos até <data>" quando X nem
    * comporta metade de uma compra típica da categoria (ver shouldAvoidInsteadOfCap_);
    * acima do limite: "Evitar gastos". Um ciclo não "libera espaço" aos poucos (como a
    * janela móvel antiga liberava): reseta de uma vez quando vira. untilYmd (opcional):
-   * acrescenta ", até <data>" -- o fim do ciclo, na visão "Ciclo atual" (cada barra tem o
-   * seu); na visão de um mês fica de fora, a barra toda já é o mês. excludeFlagged
+   * o fim do ciclo, na visão "Ciclo atual" (cada barra tem o seu); sem ele (visão de um mês)
+   * sai só "Gastar no máximo R$ X" -- a barra toda já é o mês. excludeFlagged
    * (opcional): os orçamentos passam true -- ignoram lançamentos fora das análises ao
    * decidir o texto também, não só a barra em si. Vinculados a um recorrente são sempre
    * ignorados (ver spentForBudgetInRange_).
@@ -11003,7 +11117,21 @@
     if (progress.status === 'ok') {
       var remainingToWarning = progress.limit * BUDGET_WARNING_RATIO_ - progress.spent;
       if (!shouldAvoidInsteadOfCap_(remainingToWarning, b.categoryIds, fromYmd, toYmd, excludeFlagged)) {
-        return 'Gastar no máximo ' + fmtMoneyNoCents_(remainingToWarning) + (untilText ? ', até ' + untilText : '');
+        if (!untilYmd) return 'Gastar no máximo ' + fmtMoneyNoCents_(remainingToWarning);
+        // O que SOBRA do teto dividido pelos dias que SOBRAM no ciclo (não uma média fixa: gastou menos, o dia rende
+        // mais; gastou mais, rende menos -- e com plano de recuperação o teto já vem reduzido em progress.limit).
+        // "Essa semana" = o resto da semana de calendário (domingo a sábado) até o fim do ciclo, o que vier primeiro.
+        // Sempre em reais inteiros, pra baixo: é um MÁXIMO, nunca promete um centavo a mais do que sobra.
+        var today0 = new Date(); today0.setHours(0, 0, 0, 0);
+        var daysLeft = Math.max(1, Math.round((parseYmdLocal_(untilYmd) - today0) / (24 * 60 * 60 * 1000)) + 1);
+        var weekDaysLeft = Math.min(daysLeft, 7 - today0.getDay());
+        var perDay = Math.max(0, remainingToWarning) / daysLeft;
+        var perDayWhole = Math.floor(perDay + 1e-9);
+        var weekWhole = Math.floor(perDay * weekDaysLeft + 1e-9);
+        if (weekDaysLeft <= 1 && perDayWhole >= 1) return 'Gastar no máximo ' + fmtMoneyNoCents_(perDayWhole) + ' hoje';
+        if (weekWhole >= 1 && weekDaysLeft > 1) {
+          return 'Gastar no máximo ' + fmtMoneyNoCents_(weekWhole) + ' essa semana' + (perDayWhole >= 1 ? ' / ' + fmtMoneyNoCents_(perDayWhole) + ' por dia' : '');
+        }
       }
     }
     return 'Evitar gastos' + (untilText ? ' até ' + untilText : '');
@@ -11038,9 +11166,9 @@
   }
   /** "Ver lançamentos" de um orçamento (inclusive o Geral, ver budgetWithEffectiveCategories_):
    *  Extrato filtrado pelas categorias dele + o ciclo atual dele. */
-  function viewBudgetTransactions_(b) {
+  function viewBudgetTransactions_(b, cycleRange) {
     var eff = budgetWithEffectiveCategories_(b);
-    var range = budgetProgressDateRange_(eff);
+    var range = cycleRange || budgetProgressDateRange_(eff); // cycleRange: o ciclo do círculo tocado (senão o ciclo atual)
     // useEffectiveDate:true -- o gasto mostrado na barra (spentForBudgetInRange_ etc.)
     // já soma pela data EFETIVA (parcela 2+ conta no mês da FATURA, não da compra, ver
     // budgetEffectiveDate_); sem isso aqui, uma parcela cuja fatura cai neste período mas
@@ -11052,9 +11180,8 @@
     render();
   }
   /** Progresso (spent/limit/status) do ciclo atual do orçamento b -- sob demanda pra UM orçamento
-   *  (usada por setupBudgetBarMenus_, que precisa recalcular na hora de abrir o menu -- pode ter
-   *  passado tempo/mudado STATE.allTransactions desde o render). null = Automático sem histórico
-   *  suficiente. */
+   *  (sob demanda, na hora de abrir algo -- pode ter passado tempo/mudado STATE.allTransactions desde o
+   *  render). null = Automático sem histórico suficiente. */
   function budgetProgressForCurrentPeriod_(b) {
     return computeBudgetCycleProgress_(b);
   }
@@ -11098,98 +11225,13 @@
     });
     return card;
   }
-  /** Card de resumo de um orçamento (Manual, Automático ou o Geral) pro ciclo atual: gasto
-   *  (clicável, abre o Extrato), limite normal do ciclo e -- com plano de recuperação ativo -- o teto
-   *  de economia e até quando ele vale. progress null = Automático sem histórico ainda. */
-  function budgetBarSummaryCard_(b, progress, closeMenu) {
-    var title = b.periodMode === 'auto' ? 'Automático' : 'Manual';
-    if (!progress) return buildBudgetMenuSummaryCard_(title, [{ text: 'Histórico insuficiente' }]);
-    var spec = budgetCycleSpecOf_(budgetWithEffectiveCategories_(b));
-    var where = 'neste ciclo (' + budgetCyclePeriodText_(progress.cycle.fromYmd, progress.cycle.toYmd) + ')';
-    var recovery = progress.recovery && progress.recovery.active ? progress.recovery : null;
-    var rows = [
-      { text: fmtMoneyNoCents_(progress.spent) + ' gastos ' + where, onClick: function () { closeMenu(); viewBudgetTransactions_(b); } },
-      { text: (title === 'Automático' ? 'Limite automático' : 'Limite manual') + ' de ' + fmtMoneyNoCents_(recovery ? recovery.normalLimit : progress.limit) +
-        ' · ciclo de ' + budgetCycleLabel_(spec) }
-    ];
-    if (recovery) {
-      rows.push({ text: 'Teto de economia de ' + fmtMoneyNoCents_(progress.limit) + ' (' + Math.round((1 - BUDGET_RECOVERY_MAX_SAVING_) * 100) + '%)' });
-      rows.push({ text: budgetRecoveryNote_(recovery) });
-    }
-    return buildBudgetMenuSummaryCard_(title, rows);
-  }
-  function budgetMenuCapsule_(text, onClick) {
-    var btn = document.createElement('button');
-    btn.type = 'button';
-    btn.className = 'capsule';
-    btn.textContent = text;
-    btn.onclick = onClick;
-    return btn;
-  }
-  /**
-   * Segurar (ou passar o mouse em) uma barra de orçamento revela um dropdown -- mesma
-   * formatação/animação do menu do "+" (ver setupHoldToReveal_/setupFabSpeedDial_).
-   * buildItems(hold) devolve os elementos do menu (null/[] = não abre); onBarClick = o
-   * clique simples na barra. 200ms (não os 500ms padrão) -- pedido explícito do usuário,
-   * mesmo valor já usado pelo "+" (hoverDelayMs:200).
-   */
-  function attachBudgetBarMenu_(barEl, buildItems, onBarClick) {
-    var hold = setupHoldToReveal_(barEl, { hoverDelayMs: 200 });
-    var menuEl = null;
-    var stopOutsideClick_ = null;
-
-    hold.onOpen(function () {
-      var items = buildItems(hold);
-      if (!items || !items.length) return;
-      menuEl = document.createElement('div');
-      menuEl.style.cssText = 'position:fixed;display:flex;flex-direction:column;align-items:flex-start;gap:8px;' +
-        'padding-bottom:' + HOLD_REVEAL_GAP_PX + 'px;opacity:0;transform:translateY(6px);' +
-        'transition:opacity .15s ease,transform .15s ease;pointer-events:none;z-index:45';
-      items.forEach(function (el) { menuEl.appendChild(el); });
-      document.body.appendChild(menuEl);
-      hold.joinHoverGroup(menuEl);
-
-      // Toca a barra por baixo sem gap (o padding-bottom já dá o respiro visual, igual
-      // a pilha do "+" — ver comentário lá) pra não abrir um vão sem hover no meio;
-      // só quando vira pra baixo (raro — quase sem espaço acima) usa um respiro
-      // explícito mesmo, já que o lado que encostaria na barra ali é o de cima do
-      // menu, que não tem padding pra cobrir isso.
-      var barRect = barEl.getBoundingClientRect();
-      var desiredTop = barRect.top - menuEl.offsetHeight;
-      if (desiredTop < 8) desiredTop = barRect.bottom + HOLD_REVEAL_GAP_PX;
-      // Abre a partir de onde o mouse/toque estava na barra (não sempre a ponta
-      // esquerda) — barras de orçamento podem ser bem largas, então segurar perto da
-      // direita não deveria abrir o menu lá longe, do outro lado.
-      var pointerX = hold.getPointerX();
-      var desiredLeft = pointerX !== null ? pointerX : barRect.left;
-      var clamped = clampToViewport_(desiredLeft, desiredTop, menuEl.offsetWidth, menuEl.offsetHeight);
-      menuEl.style.left = clamped.left + 'px';
-      menuEl.style.top = clamped.top + 'px';
-      menuEl.style.pointerEvents = 'auto';
-      requestAnimationFrame(function () {
-        menuEl.style.opacity = '1';
-        menuEl.style.transform = 'translateY(0)';
-      });
-      stopOutsideClick_ = dismissOnOutsideClick(menuEl, hold.close, true);
-    });
-    hold.onClose(function () {
-      if (menuEl) { menuEl.remove(); menuEl = null; }
-      if (stopOutsideClick_) { stopOutsideClick_(); stopOutsideClick_ = null; }
-    });
-
-    barEl.onclick = function () {
-      if (hold.consumeSuppressedClick()) return;
-      hold.close();
-      onBarClick();
-    };
-  }
   /**
    * Chamado de novo a cada renderDashboard() porque as barras são reconstruídas do zero a
    * cada render, então os listeners de uma rodada anterior ficam presos a elementos já
-   * descartados (mesmo padrão de todo outro wiring pós-innerHTML deste app). Barras de
-   * orçamento de verdade: resumo + (com plano de recuperação ativo) "Dispensar plano" +
-   * "Editar orçamento" (o Geral é uma linha como as outras, só que o editar não tem categorias).
-   * (Sugestões de orçamento NOVO ficam só no Planejamento, com Confirmar / Descartar.)
+   * descartados (mesmo padrão de todo outro wiring pós-innerHTML deste app). Clicar/tocar na linha de um
+   * orçamento (inclusive o Geral, que só não tem categorias) abre o menu de editar orçamento -- é lá que
+   * ficam o resumo, o plano de recuperação e o "Dispensar plano". O tooltip e o atalho pro Extrato agora são
+   * dos círculos (ver wireBudgetCircles_). (Sugestões de orçamento NOVO ficam só no Planejamento.)
    */
   function setupBudgetBarMenus_(root) {
     function findBudget_(id) { return STATE.budgets.find(function (x) { return x.id === id; }); }
@@ -11197,20 +11239,10 @@
     wireBudgetCircles_(root);
     root.querySelectorAll('[data-budget-bar]').forEach(function (barEl) {
       var budgetId = barEl.dataset.budgetBar;
-      attachBudgetBarMenu_(barEl, function (hold) {
+      barEl.onclick = function () {
         var b = findBudget_(budgetId);
-        if (!b) return null;
-        var progress = budgetProgressForCurrentPeriod_(b);
-        var items = [budgetBarSummaryCard_(b, progress, hold.close)];
-        if (progress && progress.recovery && progress.recovery.active) {
-          items.push(budgetMenuCapsule_('Dispensar plano', function () { hold.close(); dismissBudgetRecoveryClient_(b); }));
-        }
-        items.push(budgetMenuCapsule_('Editar orçamento', function () { hold.close(); openBudgetModal(b); }));
-        return items;
-      }, function () {
-        var b = findBudget_(budgetId);
-        if (b) viewBudgetTransactions_(b);
-      });
+        if (b) openBudgetModal(b);
+      };
     });
   }
   /** Gasto do mês inteiro (dia 1 ao último) das categorias, contra `limit` já proporcional
@@ -11297,7 +11329,7 @@
    * computeBudgetRangeAdvisory_) à direita do último círculo (quebra pra baixo em tela
    * estreita). A PRIMEIRA linha é o orçamento Geral (todas as despesas, ver
    * budgetWithEffectiveCategories_). Com plano de recuperação ativo (ver budgetRecoveryState_) o círculo
-   * usa o teto de economia e uma linha logo abaixo diz até quando.
+   * e o texto já usam o teto de economia (sem nota à parte: o modal de editar explica o plano).
    */
   function buildBudgetTimelineHtml(d) {
     var activeBudgets = STATE.budgets.filter(function (b) { return !b.archived && !b.isUnbudgetedCatchAll; }).sort(byBudgetCategoryNamePt_);
@@ -11312,12 +11344,6 @@
       var eff = budgetWithEffectiveCategories_(b);
       return budgetAdvisoryHtml_(computeBudgetRangeAdvisory_(eff, progress.cycle.fromYmd, progress.cycle.toYmd, progress, true, progress.cycle.toYmd));
     }
-    function recoveryNoteHtmlOf_(progress) {
-      return progress.recovery && progress.recovery.active
-        ? '<div class="budget-recovery-note">' + escapeHtml(budgetRecoveryNote_(progress.recovery)) + '</div>'
-        : '';
-    }
-
     var geralProgress = geralBudget ? progressOf_(geralBudget) : null;
     if (!activeBudgets.length && !geralProgress) return '';
 
@@ -11344,7 +11370,6 @@
           budgetCirclesTrackHtml_(series) +
           '<div class="budget-circles-advice">' + adviceHtmlOf_(b, progress) + '</div>' +
         '</div>' +
-        recoveryNoteHtmlOf_(progress) +
       '</div>';
     }).join('');
 
