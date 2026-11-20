@@ -642,23 +642,6 @@
     transform: translateY(3px);
   }
 
-  /* Celular: "+" no centro da barra de abas (applyMobileDock_, JavaScript.html) -- cor cheia, é a ação principal; com o
-     teclado aberto a barra inteira some pra não cobrir o que se digita. */
-  @media (max-width: 640px) {
-    nav.tabbar > .fab.fab-in-bar {
-      width: 48px; height: 48px; margin: 0 4px; font-size: 28px;
-      background: var(--primary); color: var(--primary-contrast); border-color: transparent;
-      box-shadow: 0 4px 12px color-mix(in srgb, var(--primary) 45%, rgba(0,0,0,.25));
-    }
-    html.kb-open .dock-row, html.kb-open #scroll-to-top-btn, html.kb-open #corner-stack { visibility: hidden; opacity: 0; pointer-events: none; }
-    html.kb-open .dock-row > * { pointer-events: none; }
-  }
-  @media (max-width: 640px) and (prefers-reduced-motion: no-preference) {
-    nav.tabbar > .fab.fab-in-bar { transition: transform .15s ease, box-shadow .15s ease; }
-    nav.tabbar > .fab.fab-in-bar:active { transform: scale(.88); }
-    .dock-row { transition: opacity .18s ease, visibility .18s; }
-  }
-
   /* "Revisar pendências": círculo logo acima do "+" (mesmo eixo), com o ícone de checklist e a
      contagem num selo. Expande pro lado de dentro (por cima da barra) ao passar o mouse /
      segurar (ver setupReviewButton_); o ícone nunca sai do lugar -- do lado direito a ordem
@@ -767,14 +750,14 @@
   .cycle-status { font-size: 13px; margin-bottom: 8px; }
   .cycle-big { font-size: 24px; font-weight: 600; margin-bottom: 10px; }
   .cycle-big .muted { font-size: 13px; font-weight: 400; }
-  /* A barra é a receita do ciclo: o trecho cheio (marrom) é a sobra; o que já saiu fica VAZIO (trilho), com uma linha pontilhada
-     colorida onde cada grupo de gastos começa. Estourou: vermelho dessaturado cresce da direita pra esquerda. */
+  /* A barra é a receita do ciclo: o trecho cheio (marrom) é a sobra; o que já saiu fica VAZIO (trilho), com um gradiente curto
+     (da cor do grupo até a cor da barra) onde cada grupo de gastos começa. Estourou: vermelho dessaturado cresce da direita pra esquerda. */
   .cycle-bar-wrap { position: relative; padding: 4px 0; }
   .cycle-bar { position: relative; display: flex; height: 26px; border-radius: 13px; overflow: hidden; background: var(--border); }
   .cycle-bar span { display: block; height: 100%; min-width: 2px; }
   .cycle-bar .cycle-bar-left { background: var(--primary); }
   .cycle-bar .cycle-bar-over { position: absolute; top: 0; right: 0; background: var(--cycle-over); }
-  .cycle-mark { position: absolute; top: 0; bottom: 0; width: 0; margin-left: -1px; border-left: 2px dotted var(--c); pointer-events: none; filter: drop-shadow(0 0 1px var(--surface)); }
+  .cycle-mark { position: absolute; top: 0; bottom: 0; width: min(24px, var(--sw, 24px)); background: linear-gradient(90deg, var(--c), transparent); pointer-events: none; }
   .cycle-legend .cycle-dot-left { background: var(--primary); }
   .cycle-legend .cycle-dot-over { background: var(--cycle-over); }
   .cycle-legend { display: flex; flex-wrap: wrap; gap: 6px 14px; margin-top: 10px; font-size: 12px; color: var(--text-muted); }
@@ -783,7 +766,7 @@
   @media (hover: hover) and (prefers-reduced-motion: no-preference) { .cycle-extra-link, .cycle-seg-link { transition: translate .15s ease, opacity .15s ease, scale .12s ease; } .cycle-extra-link:hover, .cycle-seg-link:hover { translate: 3px 0; opacity: .85; } }
   .cycle-seg-link:active, .cycle-extra-link:active { scale: .97; }
   .cycle-legend i { display: inline-block; width: 9px; height: 9px; border-radius: 50%; margin-right: 5px; }
-  /* Entrada: o cheio cresce da esquerda, o vermelho da direita e as linhas pontilhadas aparecem por último (só ao entrar na aba ou trocar de ciclo). */
+  /* Entrada: o cheio cresce da esquerda, o vermelho da direita e os gradientes aparecem por último (só ao entrar na aba ou trocar de ciclo). */
   @media (prefers-reduced-motion: no-preference) {
     .view-enter .cycle-bar-left, .cycle-anim .cycle-bar-left { animation: cycle-grow-l .8s cubic-bezier(.2,.8,.2,1) .3s backwards; }
     .view-enter .cycle-bar-over, .cycle-anim .cycle-bar-over { animation: cycle-grow-r .8s cubic-bezier(.2,.8,.2,1) .3s backwards; }
@@ -978,7 +961,6 @@
   /* ---------- Celular (<= 640px): janelas viram "bottom sheets" que acompanham o teclado. O PC não muda. ----------
      --vvh/--vvt (JavaScript.html, setupViewportVars_) = altura/topo da área visível já descontado o teclado. */
   .sheet-grabber { display: none; }
-  .tx-more-wrap { display: none; }
   @media (max-width: 640px) {
     .modal-backdrop:not(.modal-center) {
       inset: auto; left: 0; right: 0;
@@ -1013,45 +995,30 @@
     .sheet-actions > button:only-child { width: 100%; padding: 13px 16px; }
     .sheet-actions button, .sheet-actions .btn-pair button { min-height: 48px; }
 
-    /* Lançamento: fluxo curto -- Valor, Categoria, (Descrição), Conta; o resto em "Mais detalhes". */
-    #tx-form-fields { display: flex; flex-direction: column; }
-    #tx-form-fields > .tx-f-amount { order: 1; }
-    #tx-form-fields > .tx-f-category { order: 2; }
-    #tx-form-fields > .tx-f-from { order: 2; }
-    #tx-form-fields > .tx-f-to { order: 3; }
-    #tx-form-fields > .tx-f-account { order: 3; }
-    #tx-form-fields > .tx-f-bill { order: 4; }
-    #tx-form-fields > .tx-f-who { order: 4; }
-    #tx-form-fields > .tx-more-wrap { order: 5; display: block; }
-    #tx-form-fields > .tx-f-date { order: 6; }
-    #tx-form-fields > .tx-f-desc { order: 7; }
-    #tx-form-fields:not(.tx-more-open) > .tx-detail { display: none !important; }
-    .tx-f-amount input#t-amount { font-size: 24px; font-weight: 600; padding: 12px 14px; }
-    .tx-f-amount > div:first-child { flex: 2 1 0 !important; }
+    /* Lançamento: mesma ordem do PC. Valor grande; Parcelas só aparece (animada) quando a conta é cartão de crédito. */
+    .tx-f-amount { gap: 0 !important; align-items: flex-end; }
+    .tx-f-amount > div:first-child { flex: 1 1 0 !important; }
+    /* Valor e Parcelas: mesma fonte e mesma altura (as larguras é que diferem). */
+    .tx-f-amount input { font-size: 24px; font-weight: 600; padding: 12px 14px; box-sizing: border-box; height: 56px; margin-bottom: 0; }
+    .tx-f-amount > .tx-inst-col { flex: 0 0 0 !important; margin-left: 0; opacity: 0; overflow: hidden; visibility: hidden; }
+    .tx-f-amount.has-inst > .tx-inst-col { flex: 0 0 96px !important; margin-left: 10px; opacity: 1; overflow: visible; visibility: visible; }
     .tx-f-amount .field-action-group { flex-wrap: wrap; gap: 0 10px; min-width: 0; max-width: 100%; }
     .tx-f-category .capsule-field, .tx-f-account .capsule-field, .tx-f-from .capsule-field, .tx-f-to .capsule-field { gap: 8px; }
     .tx-f-category .capsule, .tx-f-account .capsule, .tx-f-from .capsule, .tx-f-to .capsule {
       padding: 10px 16px; font-size: 14px; min-height: 44px; display: inline-flex; align-items: center; justify-content: center;
     }
     .tx-f-account .acc-color-name, .tx-f-from .acc-color-name, .tx-f-to .acc-color-name { font-size: 13px; }
-    .tx-more-toggle {
-      display: flex; align-items: center; justify-content: center; gap: 6px; width: 100%; min-height: 44px;
-      margin: 2px 0 10px; background: transparent; color: var(--text-muted); border: 1px dashed var(--border); border-radius: 12px;
-      font-size: 14px; font-weight: 600;
-    }
-    .tx-more-chevron { transition: transform .25s ease; }
-    .tx-more-toggle[aria-expanded="true"] .tx-more-chevron { transform: rotate(180deg); }
+    /* Título do campo bem mais forte que as perguntas de ação ("Lembrar categoria?", "Reembolso?"). */
+    .modal .field label { font-size: 14px; font-weight: 600; color: var(--text); }
+    .modal .field-action-link { font-size: 12px; }
     /* Campos de texto com altura confortável pro toque; 16px evita o zoom automático do iOS ao focar. */
     .modal input, .modal select, .modal textarea { font-size: 16px; min-height: 44px; }
   }
   @media (max-width: 640px) and (prefers-reduced-motion: no-preference) {
-    #tx-form-fields.tx-more-open > .tx-detail { animation: tx-detail-in .3s cubic-bezier(.2,.8,.2,1) backwards; }
-    @keyframes tx-detail-in { from { opacity: 0; transform: translateY(-8px); } }
-    .tx-more-toggle { transition: background-color .2s ease, transform .15s ease; }
-    .tx-more-toggle:active { transform: scale(.98); background: var(--border); }
-  }
-  @media (max-width: 640px) and (prefers-reduced-motion: reduce) {
-    .tx-more-chevron { transition: none; }
+    .tx-f-amount > div:first-child, .tx-f-amount > .tx-inst-col {
+      transition: flex-basis .28s cubic-bezier(.2,.8,.2,1), margin-left .28s cubic-bezier(.2,.8,.2,1), opacity .22s ease, visibility 0s linear .28s;
+    }
+    .tx-f-amount.has-inst > .tx-inst-col { transition: flex-basis .28s cubic-bezier(.2,.8,.2,1), margin-left .28s cubic-bezier(.2,.8,.2,1), opacity .24s ease .06s, visibility 0s; }
   }
 
   /* Menu de escolha no celular (openDropdownSheet_): folha que sobe da base, linhas altas, busca no topo se a lista é longa. */
@@ -1092,43 +1059,13 @@
     @keyframes dd-check-in { from { transform: scale(.4); opacity: 0; } }
   }
 
-  /* Celular: linhas do Extrato compactas (categoria e valor na mesma linha, detalhes embaixo, tudo com reticências),
-     deslizar pra esquerda exclui (applyRowSwipe, JavaScript.html) e o aviso "Desfazer" fica acima da barra de abas. */
-  .row-swipe-wrap { position: relative; overflow: hidden; }
-  .row-swipe-under {
-    position: absolute; inset: 0; display: flex; align-items: center; justify-content: flex-end; gap: 8px;
-    padding-right: 18px; background: var(--expense); color: #fff; font-size: 14px; font-weight: 600;
-  }
-  .row-swipe-under svg { width: 22px; height: 22px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; flex: none; }
-  .row-swiping { background: var(--surface); position: relative; }
-  #undo-toast-container {
-    position: fixed; left: 50%; transform: translateX(-50%); z-index: 100; display: flex; flex-direction: column; align-items: center; gap: 8px;
-    bottom: calc(var(--dock-bottom) + 70px); width: min(92vw, 420px); pointer-events: none;
-  }
-  .toast.toast-undo {
-    position: relative; overflow: hidden; display: flex; align-items: center; justify-content: space-between; gap: 16px;
-    width: 100%; box-sizing: border-box; padding: 6px 6px 6px 16px; font-size: 14px; pointer-events: auto;
-    box-shadow: 0 6px 20px rgba(0,0,0,.3);
-  }
-  .toast-undo-btn { background: transparent; color: inherit; font-weight: 800; letter-spacing: .04em; text-transform: uppercase; padding: 10px 14px; min-height: 44px; border-radius: 8px; font-size: 13px; }
-  .toast-undo-bar { position: absolute; left: 0; bottom: 0; height: 3px; width: 100%; background: currentColor; opacity: .5; transform-origin: 0 50%; animation: undo-bar linear forwards; }
-  @keyframes undo-bar { to { transform: scaleX(0); } }
-  @media (prefers-reduced-motion: no-preference) {
-    .row-swipe-under svg { transition: transform .18s cubic-bezier(.34,1.5,.64,1); }
-    .row-swipe-wrap.armed .row-swipe-under svg { transform: scale(1.25) rotate(-8deg); }
-    .row-swipe-under { transition: background-color .15s ease; }
-    .row-swipe-wrap.armed .row-swipe-under { background: color-mix(in srgb, var(--expense) 82%, #000); }
-    .toast.toast-undo { animation: undo-toast-rise .35s cubic-bezier(.2,.8,.2,1) backwards; }
-    @keyframes undo-toast-rise { from { transform: translateY(24px); opacity: 0; } }
-    .toast-undo-btn:active { background: color-mix(in srgb, currentColor 18%, transparent); }
-  }
+  /* Celular: linhas do Extrato compactas (categoria e valor na mesma linha, detalhes embaixo, tudo com reticências e centrado na vertical). */
   @media (max-width: 640px) {
-    .row-clickable[data-tx], .row.row-clickable[data-tx] { align-items: flex-start; padding: 11px 0; min-height: 52px; box-sizing: border-box; }
+    .row-clickable[data-tx], .row.row-clickable[data-tx] { align-items: center; padding: 11px 0; min-height: 52px; box-sizing: border-box; }
     .row .tx-txt { flex: 1 1 auto; min-width: 0; }
     .row .tx-txt br { display: none; }
     .row .tx-l1, .row .tx-l2 { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
     .row .tx-l2 { margin-top: 2px; }
-    .row[data-tx] > span:last-child { padding-top: 0; }
   }
 
   .empty-state { text-align: center; color: var(--text-muted); padding: 24px 0; }
@@ -2035,6 +1972,11 @@
     .modal-backdrop.modal-center .modal.modal-pop { animation-name: modal-rise-short; }
     @keyframes modal-rise-short { from { transform: translateY(56px); opacity: 0; } }
     @keyframes modal-fade { from { opacity: 0; } }
+    /* Fechar janelas (voltar, Esc, tocar fora, Salvar) · a inversa de abrir: desce e some, o fundo some junto. */
+    .modal.modal-out { animation: modal-sink .22s cubic-bezier(.4,0,1,1) forwards; }
+    .modal-backdrop.modal-out-bd { animation: modal-fade-out .22s ease forwards; }
+    .modal-backdrop.modal-center .modal.modal-out { animation-name: modal-sink-short; }
+    @keyframes modal-sink-short { to { transform: translateY(56px); opacity: 0; } }
     /* Tooltips · surgem com um leve zoom/subida (a origem fica do lado da seta). */
     .shared-tooltip { animation: tip-in .16s ease-out backwards; }
     @keyframes tip-in { from { opacity: 0; transform: translateY(4px) scale(.92); } }
@@ -2332,11 +2274,14 @@
   var UI_ICON_SUN_ = '<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M4.93 19.07l1.41-1.41M17.66 6.34l1.41-1.41"/></svg>';
   var UI_ICON_MOON_ = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8z"/></svg>';
   var UI_ICON_WARN_ = '<svg class="inline-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><path d="M12 9v4M12 17h.01"/></svg>';
-  function updateThemeToggleIcon_() {
+  /** No app Android, a barra de notificações/navegação segue o tema escolhido aqui (versões antigas do app não têm setTheme). */
+  function syncNativeTheme_() {
+    try { if (window.FinancasApp && typeof window.FinancasApp.setTheme === 'function') window.FinancasApp.setTheme(currentEffectiveTheme_() === 'dark'); } catch (e) { /* segue sem */ }
+  }
+  function updateThemeToggleIcon_(skipNative) {
     var btn = document.getElementById('theme-toggle');
     if (btn) btn.innerHTML = currentEffectiveTheme_() === 'dark' ? UI_ICON_SUN_ : UI_ICON_MOON_;
-    // No app Android, a barra de notificações/navegação segue o tema escolhido aqui (versões antigas do app não têm setTheme).
-    try { if (window.FinancasApp && typeof window.FinancasApp.setTheme === 'function') window.FinancasApp.setTheme(currentEffectiveTheme_() === 'dark'); } catch (e) { /* segue sem */ }
+    if (!skipNative) syncNativeTheme_();
   }
   /**
    * Troca de tema com a animação do handoff (docs/HANDOFF-theme-animation.md do Automations Dashboard), copiada como está:
@@ -2349,11 +2294,16 @@
     var root = document.documentElement;
     if (theme) root.setAttribute('data-theme', theme); else root.removeAttribute('data-theme');
   }
-  function changeTheme_(theme, commit, origin) {
+  /**
+   * commit() é a parte LEVE (atributo, ícone, preferência) e roda dentro da transição; heavy() (o render() completo, que
+   * recalcula cores lidas por getComputedStyle) roda só depois que a animação já começou, pra ela não esperar por ele.
+   * As barras do Android (syncNativeTheme_) trocam quando o círculo termina de cobrir a tela.
+   */
+  function changeTheme_(theme, commit, origin, heavy) {
     var root = document.documentElement;
     var reduced = false;
     try { reduced = window.matchMedia('(prefers-reduced-motion: reduce)').matches; } catch (e) { reduced = false; }
-    if (reduced) { applyThemeAttribute_(theme); commit(); return; }
+    if (reduced) { applyThemeAttribute_(theme); commit(); if (heavy) heavy(); syncNativeTheme_(); return; }
     if (typeof document.startViewTransition === 'function') {
       var x = origin && origin.x != null ? origin.x : window.innerWidth - 80;
       var y = origin && origin.y != null ? origin.y : 30;
@@ -2361,7 +2311,11 @@
       // Cores que deslizam sozinhas ficariam no meio do caminho na foto nova e atrasariam: sem transições enquanto ela é tirada.
       root.classList.add('theme-switching');
       var transition = document.startViewTransition(function () { applyThemeAttribute_(theme); commit(); });
-      var done = function () { root.classList.remove('theme-switching'); };
+      var nativeDone = false;
+      var done = function () {
+        root.classList.remove('theme-switching');
+        if (!nativeDone) { nativeDone = true; syncNativeTheme_(); }
+      };
       transition.finished.then(done, done);
       window.setTimeout(done, 1000); // aba escondida pode nunca terminar a foto
       transition.ready.then(function () {
@@ -2369,14 +2323,16 @@
           { clipPath: ['circle(0px at ' + x + 'px ' + y + 'px)', 'circle(' + radius + 'px at ' + x + 'px ' + y + 'px)'] },
           { duration: 175, easing: 'cubic-bezier(0.22, 0.61, 0.36, 1)', pseudoElement: '::view-transition-new(root)' }
         );
-      }).catch(function () { /* sem animação, o tema já trocou */ });
+        if (heavy) window.setTimeout(heavy, 0);
+      }).catch(function () { if (heavy) heavy(); /* sem animação, o tema já trocou */ });
       return;
     }
     // Sem View Transitions: as cores deslizam por um instante.
     root.classList.add('theme-fade');
     applyThemeAttribute_(theme);
     commit();
-    window.setTimeout(function () { root.classList.remove('theme-fade'); }, 112);
+    if (heavy) heavy();
+    window.setTimeout(function () { root.classList.remove('theme-fade'); syncNativeTheme_(); }, 112);
   }
   function themeOriginOf_(el) {
     if (!el || !el.getBoundingClientRect) return undefined;
@@ -2388,9 +2344,10 @@
     var next = currentEffectiveTheme_() === 'dark' ? 'light' : 'dark';
     changeTheme_(next, function () {
       try { localStorage.setItem('financas-theme', next); } catch (err) { /* segue sem salvar */ }
-      updateThemeToggleIcon_();
+      updateThemeToggleIcon_(true);
+    }, themeOriginOf_(document.getElementById('theme-toggle')), function () {
       render(); // recalcula cores dependentes de getComputedStyle (ex: legenda do gráfico)
-    }, themeOriginOf_(document.getElementById('theme-toggle')));
+    });
   }
 
   function escapeHtml(str) {
@@ -2781,11 +2738,17 @@
   function clampToViewport_(left, top, width, height, margin) {
     margin = margin === undefined ? 8 : margin;
     var vw = document.documentElement.clientWidth;
-    var vh = document.documentElement.clientHeight;
+    var vb = visibleBounds_();
     return {
       left: Math.min(Math.max(left, margin), Math.max(margin, vw - width - margin)),
-      top: Math.min(Math.max(top, margin), Math.max(margin, vh - height - margin))
+      top: Math.min(Math.max(vb.top + margin, top), Math.max(vb.top + margin, vb.bottom - height - margin))
     };
+  }
+  /** Faixa vertical realmente visível (descontando o teclado do celular): coordenadas do layout, como as de position:fixed. */
+  function visibleBounds_() {
+    var vv = window.visualViewport;
+    if (vv && vv.height) return { top: vv.offsetTop, bottom: vv.offsetTop + vv.height };
+    return { top: 0, bottom: document.documentElement.clientHeight };
   }
 
   /**
@@ -2804,7 +2767,7 @@
   }
 
   function positionPopover(anchorEl, pop) {
-    document.body.appendChild(pop);
+    if (pop.parentNode !== document.body) document.body.appendChild(pop);
     // Lista rolável: a rolagem vai pra um miolo (.pop-scroll), porque overflow na própria
     // caixa cortaria a ponta que sai pra fora dela.
     if (pop.classList.contains('dropdown-popover') && !pop.querySelector(':scope > .pop-scroll')) {
@@ -2816,7 +2779,7 @@
     }
     var rect = anchorEl.getBoundingClientRect();
     var popRect = pop.getBoundingClientRect();
-    var vh = document.documentElement.clientHeight;
+    var vh = visibleBounds_().bottom;
     var above = false;
     var top = rect.bottom + 10;
     if (top + popRect.height > vh - 8) { top = rect.top - popRect.height - 10; above = true; }
@@ -2824,6 +2787,42 @@
     pop.style.left = clamped.left + 'px';
     pop.style.top = clamped.top + 'px';
     setPopupTip_(pop, rect.left + rect.width / 2, above);
+  }
+
+  /**
+   * Faz um popover posicionado por positionPopover acompanhar o campo que o abriu: o teclado do celular encolhe a área
+   * visível e a janela se ajusta (rolagem suave de ~300 ms), então só posicionar uma vez deixaria o menu pra trás.
+   * Reposiciona quando a área visível ou qualquer rolagem muda, e a cada quadro por um instante logo após abrir.
+   * Devolve a função que para de acompanhar. onGone roda se o campo sair da tela (ex: janela refeita).
+   */
+  function followPopover_(anchorEl, pop, onGone) {
+    var stopped = false, raf = 0, until = Date.now() + 700;
+    var vv = window.visualViewport;
+    function update() {
+      if (stopped) return;
+      if (!anchorEl.isConnected || !pop.isConnected) { stop(); if (onGone) onGone(); return; }
+      positionPopover(anchorEl, pop);
+    }
+    function tick() {
+      raf = 0;
+      if (stopped) return;
+      update();
+      if (!stopped && Date.now() < until) raf = requestAnimationFrame(tick);
+    }
+    function onAny() { if (!raf && !stopped) update(); }
+    function stop() {
+      if (stopped) return;
+      stopped = true;
+      if (raf) cancelAnimationFrame(raf);
+      if (vv) { vv.removeEventListener('resize', onAny); vv.removeEventListener('scroll', onAny); }
+      window.removeEventListener('resize', onAny);
+      document.removeEventListener('scroll', onAny, true);
+    }
+    if (vv) { vv.addEventListener('resize', onAny); vv.addEventListener('scroll', onAny); }
+    window.addEventListener('resize', onAny);
+    document.addEventListener('scroll', onAny, true);
+    raf = requestAnimationFrame(tick);
+    return stop;
   }
 
   // ---------- tooltip de cápsula (fora do modal, nunca cortado pela borda dele) ----------
@@ -4369,15 +4368,17 @@
    * concluído, quebrando a seleção por mouse -- exatamente o tipo de bug que essa função
    * existe pra evitar.
    */
-  function setupCounterpartySuggestions_(inputEl) {
+  function setupCounterpartySuggestions_(inputEl, namesFn) {
     // O navegador (Chrome no PC) abre o próprio histórico de preenchimento por cima do
     // popover do app: desliga, só o do app aparece.
     inputEl.setAttribute('autocomplete', 'off');
     var pop = null;
     var nav = null;
+    var stopFollow = null;
     function close() {
       if (!pop) return;
       nav = null;
+      if (stopFollow) { stopFollow(); stopFollow = null; }
       pop.remove();
       document.removeEventListener('mousedown', onOutsideClick, true);
       pop = null;
@@ -4387,7 +4388,7 @@
     }
     function renderList() {
       var typed = inputEl.value.trim().toLowerCase();
-      var matches = knownCounterpartyNames().filter(function (n) {
+      var matches = (namesFn ? namesFn() : knownCounterpartyNames()).filter(function (n) {
         return !typed || n.toLowerCase().indexOf(typed) !== -1;
       });
       if (!matches.length) { close(); return; }
@@ -4413,6 +4414,7 @@
         };
       });
       positionPopover(inputEl, pop);
+      if (!stopFollow) stopFollow = followPopover_(inputEl, pop, close);
       nav = createDropdownKeyNav_(pop);
     }
     inputEl.addEventListener('focus', renderList);
@@ -4891,8 +4893,7 @@
     // (linha acima) já não tiver mais ele — até lá, removê-lo cedo demais de
     // deletingIds fazia o lançamento reaparecer por alguns segundos ao remover 2 em
     // sequência rápida.
-    // (os que ainda aguardam o "Desfazer" do swipe não foram pro servidor: continuam escondidos até o prazo.)
-    STATE.deletingIds = (typeof pendingUndoDeletes_ !== 'undefined' ? pendingUndoDeletes_ : []).map(function (e) { return e.id; });
+    STATE.deletingIds = [];
     STATE.pendingEntries = sortPendingEntries_((data.pendingEntries || []).filter(function (p) { return !pendingEntryRemovals_[p.id]; }));
     STATE.forecasts = reapplyPendingEdits_(preserveOptimisticTempEntries_(STATE.forecasts, data.forecasts || []), pendingForecastEdits_);
     STATE.budgets = reapplyPendingEdits_(preserveOptimisticTempEntries_(STATE.budgets, data.budgets || []), pendingBudgetEdits_);
@@ -5565,7 +5566,7 @@
   // (agrupado pelo nome do recorrente, senão do orçamento da categoria, senão "Orçamento geral") e as outras
   // receitas devolvem volume. Só o que de fato aconteceu: nada de projeção. Cartão conta na data da compra.
   // Cores dessaturadas e bem distintas entre si (nada de marrom: a sobra é o marrom forte e o estouro é o vermelho): cada uma marca
-  // onde um grupo de gastos começa na barra (linha pontilhada) e pinta a bolinha da legenda.
+  // onde um grupo de gastos começa na barra (gradiente curto) e pinta a bolinha da legenda.
   var CYCLE_BALANCE_PALETTE_ = ['#668cb8', '#d0b05a', '#9585c2', '#8db56f', '#c98aa0', '#7fc4b6'];
   var CYCLE_BALANCE_MAX_SEGMENTS_ = 6;
   var CYCLE_BALANCE_GENERAL_LABEL_ = 'Orçamento geral';
@@ -5737,7 +5738,7 @@
     return d(c.fromYmd) + ' a ' + d(c.toYmd);
   }
   /**
-   * Posições (em % da largura) das linhas pontilhadas que marcam onde cada grupo de gastos COMEÇA na barra.
+   * Posições (em % da largura) dos gradientes curtos que marcam onde cada grupo de gastos COMEÇA na barra.
    * A barra é a receita do ciclo: o trecho cheio (sobra) fica à esquerda e o gasto, "vazio", à direita dele. Estourou o ciclo:
    * não há trecho cheio e os grupos se distribuem pela barra toda, proporcionais ao total gasto.
    */
@@ -5772,7 +5773,9 @@
     var marks = '';
     cycleSegmentFilters_ = [];
     model.segments.forEach(function (seg, i) {
-      marks += '<i class="cycle-mark" style="left:' + layout.marks[i].toFixed(2) + '%;--c:' + CYCLE_BALANCE_PALETTE_[i % CYCLE_BALANCE_PALETTE_.length] +
+      // Gradiente curto: sai da cor do grupo no ponto em que ele começa e se dissolve na cor da barra (no máximo até o próximo grupo).
+      var nextPos = i + 1 < layout.marks.length ? layout.marks[i + 1] : 100;
+      marks += '<i class="cycle-mark" style="left:' + layout.marks[i].toFixed(2) + '%;--sw:' + Math.max(0.8, nextPos - layout.marks[i]).toFixed(2) + '%;--c:' + CYCLE_BALANCE_PALETTE_[i % CYCLE_BALANCE_PALETTE_.length] +
         '" title="' + escapeHtml(seg.label + ': ' + fmtMoneyNoCents_(seg.amount)) + '"></i>';
       cycleSegmentFilters_.push({
         kind: 'expense', onlyAnalyzed: true, dateFrom: model.fromYmd, dateTo: model.toYmd, cycleLabels: seg.labels, cycleSegmentName: seg.label
@@ -5814,7 +5817,7 @@
         (cycles.length > 1 ? appSelectHtml_('cycle-select', selOptions, String(offset)) : '') + '</div>' +
       '<div class="muted cycle-status">' + (cycles.length > 1 ? '' : 'de ' + fmtDateShort_(model.fromYmd) + ' a ' + fmtDateShort_(model.toYmd) + ' · ') + status + '</div>' +
       '<div class="cycle-big">' + big + '</div>' +
-      '<div class="cycle-bar-wrap"><div class="cycle-bar" role="img" aria-label="Saldo do ciclo">' + bar + '</div>' + marks + '</div>' +
+      '<div class="cycle-bar-wrap"><div class="cycle-bar" role="img" aria-label="Saldo do ciclo">' + bar + marks + '</div></div>' +
       (legend ? '<div class="cycle-legend">' + legend + '</div>' : '<div class="muted" style="font-size:13px;margin-top:8px">Nada saiu ' + (offset === 0 ? 'ainda ' : '') + 'neste ciclo.</div>') +
       saved +
     '</div>';
@@ -6071,10 +6074,9 @@
   function remainingForShare_(share) {
     return Math.max(0, share.expectedAmount - allocatedForShare_(share.id));
   }
-  function peopleDatalistHtml(id) {
-    return '<datalist id="' + id + '">' +
-      STATE.people.map(function (p) { return '<option value="' + escapeHtml(p.name) + '">'; }).join('') +
-      '</datalist>';
+  /** Nomes de pessoas já cadastradas (sugestões do campo de nome do popup de reembolso — menu do app, nunca o nativo). */
+  function knownPeopleNames_() {
+    return STATE.people.map(function (p) { return p.name; });
   }
   /** Divisão sugerida entre os nomeados + você mesmo (a "+1") — sua própria parte fica
    *  implícita, nunca vira uma Share (não faz sentido "eu te devo a mim mesmo"). */
@@ -6112,12 +6114,12 @@
     var refundRoot = document.getElementById('refund-modal-root');
     if (!refundRoot) return;
     if (e.key === 'Escape') {
-      closeRefundModal_();
+      closeRefundModal_(true);
     } else if (e.key === 'Enter' && e.target.id !== 'refund-new-name') {
       e.preventDefault();
       if (document.activeElement && document.activeElement !== document.body) document.activeElement.blur();
       var doneBtn = document.getElementById('refund-done');
-      if (doneBtn) doneBtn.click(); else closeRefundModal_();
+      if (doneBtn) doneBtn.click(); else closeRefundModal_(true);
     }
   });
 
@@ -6129,17 +6131,25 @@
     root.innerHTML = '<div class="modal-backdrop refund-modal-backdrop" id="refund-modal-backdrop"><div class="modal"><div class="sheet-grabber" aria-hidden="true"></div>' + innerHtml + '</div></div>';
     var refundBd_ = document.getElementById('refund-modal-backdrop');
     refundBd_.onclick = function (e) {
-      if (e.target.id === 'refund-modal-backdrop') closeRefundModal_();
+      if (e.target.id === 'refund-modal-backdrop') closeRefundModal_(true);
     };
-    attachSheetDrag_(refundBd_, closeRefundModal_);
+    attachSheetDrag_(refundBd_, function () { closeRefundModal_(); });
     setTimeout(function () {
       var field = root.querySelector('input, select, textarea');
       if (field) field.focus();
     }, 0);
   }
-  function closeRefundModal_() {
+  /** animate: só nos fechamentos do usuário (voltar/Esc/tocar fora); recriar o popup (openRefundModal_) fecha na hora. */
+  function closeRefundModal_(animate) {
     var existing = document.getElementById('refund-modal-root');
-    if (existing) existing.remove();
+    if (!existing) return;
+    if (animate !== true || !motionOk_) { existing.remove(); return; }
+    // Sai da cena já (ids soltos: nada mais enxerga o popup como aberto) e some quando a animação de saída termina.
+    existing.id = 'refund-modal-root-closing';
+    var bd = existing.querySelector('.modal-backdrop'), m = existing.querySelector('.modal');
+    if (bd) { bd.id = ''; bd.style.pointerEvents = 'none'; bd.classList.add('modal-out-bd'); }
+    if (m) m.classList.add('modal-out');
+    setTimeout(function () { existing.remove(); }, MODAL_OUT_MS_);
   }
 
   /** HTML de uma linha de pessoa dentro do popup de reembolso (ver
@@ -6164,16 +6174,16 @@
    */
   function refundAddPersonRowHtml_() {
     return '<div class="field" style="display:flex;gap:8px;align-items:center;margin-top:12px">' +
-        '<input id="refund-new-name" list="refund-people-list" placeholder="Nome" style="flex:1;margin-bottom:0">' +
+        '<input id="refund-new-name" placeholder="Nome" style="flex:1;margin-bottom:0">' +
         '<button type="button" id="refund-add-person">Adicionar</button>' +
-      '</div>' +
-      peopleDatalistHtml('refund-people-list');
+      '</div>';
   }
   /** Liga o botão "Adicionar" e o Enter dentro do campo de nome (recriados a cada
    *  build()) à mesma função doAdd — Enter não pode borbulhar pro keydown do popup
    *  inteiro (que trataria Enter como "Concluído", ver openRefundModal_). */
   function wireRefundAddPersonRow_(doAdd) {
     document.getElementById('refund-add-person').onclick = doAdd;
+    setupCounterpartySuggestions_(document.getElementById('refund-new-name'), knownPeopleNames_);
     document.getElementById('refund-new-name').addEventListener('keydown', function (e) {
       if (e.key !== 'Enter') return;
       e.preventDefault();
@@ -7324,11 +7334,6 @@
   function removeTransactionOptimistically_(id) {
     STATE.deletingIds.push(id);
     render();
-    commitTransactionDelete_(id);
-  }
-  /** Manda a exclusão ao servidor (o lançamento já está escondido em STATE.deletingIds). Separada pra o "Desfazer" do
-   *  swipe poder adiar só esta parte. */
-  function commitTransactionDelete_(id) {
     // Sucesso não precisa desmarcar/re-renderizar aqui: applyBootstrapData já limpa
     // deletingIds inteiro assim que o refreshAll do afterMutation_ trouxer dado de
     // verdade (sem esse lançamento). Mesmo motivo do atraso de pendingTransactions no
@@ -12950,6 +12955,10 @@
     var field = document.getElementById(opts.fieldId);
     if (!field) return;
     var flagged = opts.getFlag();
+    // Celular: o botão é técnico demais pra ficar sempre à mostra -- só aparece (já ligado) quando o lançamento é pontual
+    // (marcado sozinho pelo app ou já salvo assim); depois de aparecer, continua aí pra poder desligar e religar.
+    if (flagged) field.dataset.outlierShown = '1';
+    else if (typeof isMobileLayout_ === 'function' && isMobileLayout_() && !field.dataset.outlierShown) { field.innerHTML = ''; return; }
     var tooltip = 'Marque se esta ' + (opts.getKind() === 'income' ? 'receita' : 'despesa') +
       ' é pontual e não representa um padrão, para não afetar médias/tendências (ex: quitação de dívida, ajuste de saldo)';
     var btnId = opts.fieldId + '-btn';
@@ -14847,7 +14856,7 @@
         '<div style="flex:1"><label>Horário</label><input type="time" id="p-time" value="' + p.time + '"></div>' +
       '</div>' +
       '<div id="p-fields"></div>' +
-      '<div class="field" style="display:flex;gap:8px">' +
+      '<div class="field tx-f-amount" style="display:flex;gap:8px">' +
         '<div style="flex:1">' +
           '<div style="display:flex;justify-content:space-between;align-items:baseline;flex-wrap:wrap;gap:2px 8px">' +
             '<label style="margin-bottom:0">Valor</label>' +
@@ -14864,7 +14873,7 @@
           '</div>' +
           '<input id="p-amount" type="text">' +
         '</div>' +
-        '<div style="flex:1" id="p-installments-wrapper"></div>' +
+        '<div class="tx-inst-col" style="flex:1" id="p-installments-wrapper"></div>' +
       '</div>' +
       '<div id="p-counterparty-field"></div>' +
       '<div style="display:flex;gap:8px">' +
@@ -14879,8 +14888,18 @@
     // FIFO de mesmo delay) e sobrescrever o foco -- e porque nesse instante síncrono
     // p-counterparty ainda não existe (só é montado dentro de renderCounterpartyField, mais
     // abaixo, mas assim que ela roda de forma síncrona antes de qualquer setTimeout disparar).
+    // Celular: só abre o teclado quando há o que digitar -- categoria E nome já lembrados: "Referente a"; nome não
+    // lembrado (com categoria lembrada): "Pago a"/"Recebido de"; nenhum dos dois lembrados: sem foco automático.
     setTimeout(function () {
-      var field = document.getElementById('p-counterparty');
+      var field;
+      if (isMobileLayout_()) {
+        var catKnown = !!p.suggestedCategoryId, nameKnown = !!p.establishmentName;
+        var focusId = catKnown ? (nameKnown ? 'p-desc' : 'p-counterparty') : null;
+        field = focusId ? document.getElementById(focusId) : null;
+        if (!field && document.activeElement && document.activeElement !== document.body && document.activeElement.blur) document.activeElement.blur();
+      } else {
+        field = document.getElementById('p-counterparty');
+      }
       if (field) field.focus();
     }, 0);
 
@@ -14917,6 +14936,8 @@
       var isCreditCard = !!(acc && acc.type === 'credit_card');
       installmentsInput.disabled = !isCreditCard;
       if (!isCreditCard) installmentsInput.value = 1;
+      var amountRow = installmentsInput.closest('.tx-f-amount');
+      if (amountRow) amountRow.classList.toggle('has-inst', isCreditCard);
     }
     /**
      * Mesmo seletor de "Fatura sendo paga" do Novo lançamento (ver updateBillField) — sem
@@ -15036,6 +15057,7 @@
           '<div class="field"><label>Para</label><div id="p-to-field" class="capsule-field"></div></div>' +
           '<div id="p-bill-field"></div>';
         installmentsWrapper.innerHTML = '';
+        if (installmentsWrapper.parentNode) installmentsWrapper.parentNode.classList.remove('has-inst');
         var accountItems = rankedAccountItems();
         fromField = createCapsuleField(document.getElementById('p-from-field'), {
           items: accountItems, selectedValue: p.suggestedAccountId || undefined
@@ -15574,20 +15596,11 @@
       var fabRect = fab.getBoundingClientRect();
       var onLeft = navSide_() === 'left';
       var viewportW = document.documentElement.clientWidth;
-      var inBar = !!(fab.closest && fab.closest('nav.tabbar'));
-      stack.style.alignItems = inBar ? 'center' : (onLeft ? 'flex-start' : 'flex-end');
+      stack.style.alignItems = onLeft ? 'flex-start' : 'flex-end';
       stack.style.padding = '0 0 ' + HOLD_REVEAL_GAP_PX + 'px';
-      if (inBar) {
-        // "+" no centro da barra (celular): a coluna de atalhos se centraliza nele (largura fixa pro centro bater).
-        var stackW = Math.min(300, viewportW - 16);
-        stack.style.width = stackW + 'px';
-        stack.style.left = Math.max(8, Math.min(viewportW - stackW - 8, fabRect.left + fabRect.width / 2 - stackW / 2)) + 'px';
-        stack.style.right = 'auto';
-      } else {
-        stack.style.width = '';
-        stack.style.left = onLeft ? fabRect.left + 'px' : 'auto';
-        stack.style.right = onLeft ? 'auto' : (viewportW - fabRect.right) + 'px';
-      }
+      stack.style.width = '';
+      stack.style.left = onLeft ? fabRect.left + 'px' : 'auto';
+      stack.style.right = onLeft ? 'auto' : (viewportW - fabRect.right) + 'px';
       stack.style.bottom = (window.innerHeight - fabRect.top) + 'px';
       stack.style.transform = 'translateY(6px)';
 
@@ -15740,35 +15753,6 @@
 
     var fromField, toField, accountField, categoryField;
 
-    // Celular: Data, Horário (e Descrição, na transferência) ficam recolhidos em "Mais detalhes" -- o fluxo
-    // curto é Valor -> Categoria -> Conta. No PC tudo aparece sempre (o CSS esconde só o botão).
-    // Já nasce aberto quando o lançamento vem com uma data diferente de hoje (ex.: bolinha vermelha de um dia passado).
-    var txMoreOpen_ = !!(opts.date && opts.date !== todayYmd());
-    function txMoreToggleHtml_() {
-      return '<div class="tx-more-wrap"><button type="button" class="tx-more-toggle" id="t-more-toggle" aria-expanded="false">' +
-        '<span class="tx-more-label">Mais detalhes</span>' +
-        '<svg class="tx-more-chevron" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="6 9 12 15 18 9"/></svg>' +
-        '</button></div>';
-    }
-    function bindTxMoreToggle_(container) {
-      var btn = document.getElementById('t-more-toggle');
-      if (!btn) return;
-      function apply_() {
-        container.classList.toggle('tx-more-open', txMoreOpen_);
-        btn.setAttribute('aria-expanded', txMoreOpen_ ? 'true' : 'false');
-        btn.querySelector('.tx-more-label').textContent = txMoreOpen_ ? 'Menos detalhes' : 'Mais detalhes';
-      }
-      apply_();
-      btn.onclick = function () {
-        txMoreOpen_ = !txMoreOpen_;
-        apply_();
-        if (txMoreOpen_) {
-          var first = container.querySelector('.tx-detail');
-          if (first && first.scrollIntoView) { try { first.scrollIntoView({ block: 'nearest', behavior: motionOk_ ? 'smooth' : 'auto' }); } catch (_) { /* navegador antigo */ } }
-        }
-      };
-    }
-
     function renderFields() {
       var container = document.getElementById('tx-form-fields');
       // Data/Horário/Valor/Descrição existem nas 3 modalidades com o mesmo sentido —
@@ -15806,15 +15790,15 @@
       }
       if (kind === 'transfer') {
         container.innerHTML =
-          '<div class="field tx-f-date tx-detail" style="display:flex;gap:8px">' +
+          '<div class="field tx-f-date" style="display:flex;gap:8px">' +
             '<div style="flex:1"><label>Data</label><input type="date" id="t-date" value="' + preservedDate + '"></div>' +
             '<div style="flex:1"><label>Horário</label><input type="time" id="t-time" value="' + preservedTime + '"></div>' +
           '</div>' +
           '<div class="field tx-f-from"><label>De</label><div id="t-from-field" class="capsule-field"></div></div>' +
           '<div class="field tx-f-to"><label>Para</label><div id="t-to-field" class="capsule-field"></div></div>' +
           '<div class="field tx-f-amount"><label>Valor</label><input type="text" id="t-amount"></div>' +
-          '<div class="field tx-f-desc tx-detail"><label>Descrição</label><input id="t-desc" value="' + escapeHtml(preservedDesc) + '"></div>' +
-          '<div id="t-bill-field" class="tx-f-bill"></div>' + txMoreToggleHtml_();
+          '<div class="field tx-f-desc"><label>Descrição</label><input id="t-desc" value="' + escapeHtml(preservedDesc) + '"></div>' +
+          '<div id="t-bill-field" class="tx-f-bill"></div>';
         setupMoneyInput(document.getElementById('t-amount'), preservedAmount);
         var accountItems = rankedAccountItems();
         var firstAcc_ = accountItems[0] ? accountItems[0].value : null;
@@ -15834,7 +15818,7 @@
           : rankedAccountItems(function (a) { return a.type !== 'credit_card' && a.type !== 'investment'; });
         var counterpartyLabel = kind === 'income' ? 'Recebido de' : 'Pago a';
         container.innerHTML =
-          '<div class="field tx-f-date tx-detail" style="display:flex;gap:8px">' +
+          '<div class="field tx-f-date" style="display:flex;gap:8px">' +
             '<div style="flex:1"><label>Data</label><input type="date" id="t-date" value="' + preservedDate + '"></div>' +
             '<div style="flex:1"><label>Horário</label><input type="time" id="t-time" value="' + preservedTime + '"></div>' +
           '</div>' +
@@ -15859,7 +15843,7 @@
               '</div>' +
               '<input type="text" id="t-amount">' +
             '</div>' +
-            '<div style="flex:1;min-width:0"><label>Parcelas</label><input type="number" id="t-installments" min="1" value="1"></div>' +
+            '<div class="tx-inst-col" style="flex:1;min-width:0"><label>Parcelas</label><input type="number" id="t-installments" min="1" value="1"></div>' +
           '</div>' +
           '<div class="field tx-f-who" style="display:flex;gap:8px">' +
             '<div style="flex:1;min-width:0">' +
@@ -15873,7 +15857,7 @@
               '<div style="display:flex;align-items:baseline"><label style="margin-bottom:0">Referente a</label></div>' +
               '<input id="t-desc" value="' + escapeHtml(preservedDesc) + '">' +
             '</div>' +
-          '</div>' + txMoreToggleHtml_();
+          '</div>';
         setupCounterpartySuggestions_(document.getElementById('t-counterparty'));
         setupMoneyInput(document.getElementById('t-amount'), preservedAmount);
         document.getElementById('t-amount').addEventListener('input', function () { maybeSuggestOutlierT_(); maybeSuggestForecastLinkT_(); });
@@ -15918,7 +15902,6 @@
         updateInstallmentsField();
         updateForecastToggleT_();
       }
-      bindTxMoreToggle_(container);
       isFirstRender_ = false;
     }
 
@@ -15998,6 +15981,9 @@
       var isCreditCard = !!(acc && acc.type === 'credit_card');
       installmentsInput.disabled = !isCreditCard;
       if (!isCreditCard) installmentsInput.value = 1;
+      // Celular: o campo Parcelas só existe (animado, ao lado do Valor) quando a conta é cartão de crédito -- ver .has-inst no CSS.
+      var amountRow = installmentsInput.closest('.tx-f-amount');
+      if (amountRow) amountRow.classList.toggle('has-inst', isCreditCard);
     }
 
     /**
@@ -17002,159 +16988,6 @@
     }
   }
 
-  // ---------- celular: deslizar a linha de um lançamento pra ESQUERDA exclui, com "Desfazer" ----------
-  // A exclusão de verdade (servidor) só roda depois da janela do "Desfazer"; até lá o lançamento fica escondido
-  // (STATE.deletingIds) e voltar atrás é só reexibi-lo. Deslizar pra DIREITA continua trocando de aba. Parcelas ficam de
-  // fora (excluir o grupo inteiro pede confirmação, no popup do lançamento).
-  var ROW_DEL_ARM_PX_ = 96;       // a partir daqui, soltar exclui
-  var ROW_DEL_MAX_PX_ = 190;      // além disso o arrasto "estica" com resistência
-  var UNDO_DELETE_MS_ = 5000;
-  var rowSwipe_ = null;
-  var pendingUndoDeletes_ = [];   // [{ id, toast }]
-  function rowSwipeDeletable_(rowEl) {
-    if (!rowEl || !rowEl.dataset || !rowEl.dataset.tx) return false;
-    var id = rowEl.dataset.tx;
-    if (STATE.deletingIds.indexOf(id) !== -1) return false;
-    var t = STATE.allTransactions.filter(function (x) { return x.id === id; })[0];
-    return !!t && !txIsLocked_(t) && !t.installmentSeq && !t.installmentGroupId;
-  }
-  function onRowSwipeStart_(e) {
-    rowSwipe_ = null;
-    if (!isMobileLayout_() || e.touches.length !== 1 || isSwipeBlocked_()) return;
-    var row = e.target && e.target.closest && e.target.closest('.row-clickable[data-tx]');
-    if (!row || !rowSwipeDeletable_(row)) return;
-    var tch = e.touches[0];
-    rowSwipe_ = { row: row, id: row.dataset.tx, startX: tch.clientX, startY: tch.clientY, dx: 0, phase: 'undecided', wrap: null, armed: false, t0: Date.now() };
-  }
-  /** Embrulha a linha numa faixa vermelha "Excluir" que o arrasto vai revelando (a faixa recorta o que sai da linha). */
-  function rowSwipeBegin_(rs) {
-    var row = rs.row;
-    var wrap = document.createElement('div');
-    wrap.className = 'row-swipe-wrap';
-    wrap.innerHTML = '<div class="row-swipe-under"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h16M10 11v6M14 11v6M6 7l1 12a2 2 0 0 0 2 2h6a2 2 0 0 0 2-2l1-12M9 7V4h6v3"/></svg><span class="row-swipe-label">Excluir</span></div>';
-    row.parentNode.insertBefore(wrap, row);
-    wrap.appendChild(row);
-    row.classList.add('row-swiping');
-    rs.wrap = wrap;
-  }
-  function rowSwipeRestore_(rs) {
-    if (!rs.wrap || !rs.wrap.parentNode) return;
-    rs.wrap.parentNode.insertBefore(rs.row, rs.wrap);
-    rs.wrap.remove();
-    rs.row.classList.remove('row-swiping');
-    rs.row.style.transform = ''; rs.row.style.transition = '';
-  }
-  function onRowSwipeMove_(e) {
-    var rs = rowSwipe_;
-    if (!rs || e.touches.length !== 1) return;
-    var tch = e.touches[0];
-    var dx = tch.clientX - rs.startX, dy = tch.clientY - rs.startY;
-    if (rs.phase === 'undecided') {
-      if (Math.abs(dx) < 8 && Math.abs(dy) < 8) return;
-      // Vertical = rolagem; pra direita = troca de aba (gesto da página, não é desta linha).
-      if (Math.abs(dy) >= Math.abs(dx) || dx > 0) { rs.phase = 'ignore'; return; }
-      rs.phase = 'drag';
-      hideTooltip_();
-      rowSwipeBegin_(rs);
-    }
-    if (rs.phase !== 'drag') return;
-    if (swipe_) swipe_.phase = 'none'; // a troca de aba da página não pode pegar este gesto
-    if (e.cancelable) e.preventDefault();
-    var d = Math.min(0, dx);
-    var shown = d < -ROW_DEL_MAX_PX_ ? -(ROW_DEL_MAX_PX_ + (-d - ROW_DEL_MAX_PX_) * 0.25) : d;
-    rs.dx = shown;
-    rs.row.style.transition = 'none';
-    rs.row.style.transform = 'translateX(' + shown + 'px)';
-    var armed = -shown >= ROW_DEL_ARM_PX_;
-    if (armed !== rs.armed) {
-      rs.armed = armed;
-      rs.wrap.classList.toggle('armed', armed);
-      rs.wrap.querySelector('.row-swipe-label').textContent = armed ? 'Solte pra excluir' : 'Excluir';
-      if (armed && navigator.vibrate) { try { navigator.vibrate(8); } catch (_) { /* sem vibração */ } }
-    }
-  }
-  function onRowSwipeEnd_(e) {
-    var rs = rowSwipe_;
-    rowSwipe_ = null;
-    if (!rs || rs.phase !== 'drag') return;
-    var speed = -rs.dx / Math.max(1, Date.now() - rs.t0);
-    var commit = e.type !== 'touchcancel' && (rs.armed || (speed > 0.8 && -rs.dx > 40));
-    var row = rs.row, wrap = rs.wrap;
-    if (!commit) {
-      if (!motionOk_) { rowSwipeRestore_(rs); return; }
-      row.style.transition = 'transform .28s cubic-bezier(.2,.8,.2,1)';
-      row.style.transform = '';
-      setTimeout(function () { rowSwipeRestore_(rs); }, 290);
-      return;
-    }
-    if (!motionOk_) { queueUndoDelete_(rs.id); return; }
-    // Sai pela esquerda, depois a faixa encolhe até sumir (a lista fecha o vão), e só então o lançamento é marcado como excluído.
-    row.style.transition = 'transform .2s ease-in';
-    row.style.transform = 'translateX(-105%)';
-    setTimeout(function () {
-      var h = wrap.offsetHeight;
-      wrap.style.height = h + 'px';
-      void wrap.offsetHeight;
-      wrap.style.transition = 'height .2s ease, opacity .2s ease';
-      wrap.style.height = '0px';
-      wrap.style.opacity = '0';
-      setTimeout(function () { queueUndoDelete_(rs.id); }, 210);
-    }, 190);
-  }
-  /** Esconde o lançamento na hora e abre a janela do "Desfazer"; passou o tempo (ou a página vai fechar), exclui de verdade. */
-  function queueUndoDelete_(id) {
-    if (STATE.deletingIds.indexOf(id) === -1) STATE.deletingIds.push(id);
-    var entry = { id: id, toast: null };
-    pendingUndoDeletes_.push(entry);
-    entry.toast = showUndoToast_('Lançamento excluído', UNDO_DELETE_MS_, function (undone) {
-      pendingUndoDeletes_ = pendingUndoDeletes_.filter(function (x) { return x !== entry; });
-      if (undone) {
-        STATE.deletingIds = STATE.deletingIds.filter(function (x) { return x !== id; });
-        render();
-      } else {
-        commitTransactionDelete_(id);
-      }
-    });
-    render();
-  }
-  /** Aviso com botão "Desfazer" e barrinha de contagem regressiva; fica perto do polegar, acima da barra de abas. */
-  function showUndoToast_(msg, durationMs, onDone) {
-    var box = document.getElementById('undo-toast-container');
-    if (!box) {
-      box = document.createElement('div');
-      box.id = 'undo-toast-container';
-      document.body.appendChild(box);
-    }
-    var el = document.createElement('div');
-    el.className = 'toast toast-undo';
-    el.innerHTML = '<span class="toast-undo-msg"></span><button type="button" class="toast-undo-btn">Desfazer</button>' +
-      (motionOk_ ? '<span class="toast-undo-bar" style="animation-duration:' + durationMs + 'ms"></span>' : '');
-    el.firstChild.textContent = msg;
-    box.appendChild(el);
-    var finished = false, timer = null;
-    function finish(undone) {
-      if (finished) return;
-      finished = true;
-      clearTimeout(timer);
-      el.classList.add('toast-fade-out');
-      setTimeout(function () { el.remove(); }, 300);
-      onDone(!!undone);
-    }
-    el.querySelector('.toast-undo-btn').onclick = function () { finish(true); };
-    timer = setTimeout(function () { finish(false); }, durationMs);
-    return { finish: finish };
-  }
-  function flushPendingUndoDeletes_() {
-    pendingUndoDeletes_.slice().forEach(function (e) { if (e.toast) e.toast.finish(false); });
-  }
-  window.addEventListener('pagehide', flushPendingUndoDeletes_);
-  document.addEventListener('visibilitychange', function () { if (document.visibilityState === 'hidden') flushPendingUndoDeletes_(); });
-  // Registrados ANTES dos do swipe entre abas (logo abaixo): na hora de decidir, este gesto tem prioridade na esquerda.
-  document.addEventListener('touchstart', onRowSwipeStart_, { passive: true });
-  document.addEventListener('touchmove', onRowSwipeMove_, { passive: false });
-  document.addEventListener('touchend', onRowSwipeEnd_, { passive: true });
-  document.addEventListener('touchcancel', onRowSwipeEnd_, { passive: true });
-
   document.addEventListener('touchstart', onSwipeTouchStart_, { passive: true });
   document.addEventListener('touchmove', onSwipeTouchMove_, { passive: false });
   document.addEventListener('touchend', onSwipeTouchEnd_, { passive: true });
@@ -17280,7 +17113,7 @@
   }
   function openModal(innerHtml) {
     var root = document.getElementById('modal-root');
-    var hadModal_ = !!root.querySelector('.modal');
+    var hadModal_ = !!root.querySelector('.modal-backdrop:not(.modal-out-bd)');
     root.innerHTML = '<div class="modal-backdrop" id="modal-backdrop"><div class="modal"><div class="sheet-grabber" aria-hidden="true"></div>' + innerHtml + '</div></div>';
     modalOpenMotion_(root, hadModal_);
     var backdropEl_ = document.getElementById('modal-backdrop');
@@ -17288,7 +17121,7 @@
       if (e.target.id === 'modal-backdrop') closeModal();
     };
     markSheetActions_(backdropEl_.querySelector('.modal'));
-    attachSheetDrag_(backdropEl_, closeModal);
+    attachSheetDrag_(backdropEl_, function () { closeModal(true); });
     // Espera o restante da função que chamou openModal terminar de montar campos
     // (ex: cápsulas) antes de focar, senão focaria algo que ainda vai ser substituído.
     setTimeout(function () {
@@ -17302,8 +17135,26 @@
       if (field) field.focus();
     }, 0);
   }
-  function closeModal() {
-    document.getElementById('modal-root').innerHTML = '';
+  /**
+   * Fecha a janela com a animação inversa da de abrir (desce e some); instant = true quando o arrasto da alça já a levou
+   * embora. Enquanto anima, a janela já não conta como aberta (id solto) — Enter/Esc/atalhos não a enxergam mais.
+   */
+  var MODAL_OUT_MS_ = 220;
+  function closeModal(instant) {
+    var root = document.getElementById('modal-root');
+    var bd = root.querySelector ? root.querySelector('.modal-backdrop') : null;
+    if (bd && bd.classList.contains('modal-out-bd')) return; // já saindo
+    if (bd && motionOk_ && instant !== true) {
+      var m = bd.querySelector('.modal');
+      bd.id = 'modal-backdrop-closing';
+      bd.style.pointerEvents = 'none';
+      bd.classList.remove('modal-pop-bd');
+      bd.classList.add('modal-out-bd');
+      if (m) { m.classList.remove('modal-pop'); m.classList.add('modal-out'); }
+      setTimeout(function () { if (bd.parentNode === root) root.innerHTML = ''; }, MODAL_OUT_MS_);
+    } else {
+      root.innerHTML = '';
+    }
     // Ressincroniza o botão "para confirmar" (fora do #view-root, não é refeito por render()):
     // fechar o popup nunca deve deixá-lo escondido com itens ainda na fila.
     updateReviewButton_();
@@ -18382,9 +18233,8 @@
         try {
           if (value) localStorage.setItem('financas-theme', value); else localStorage.removeItem('financas-theme');
         } catch (err) { /* segue sem salvar */ }
-        updateThemeToggleIcon_();
-        render();
-      }, origin);
+        updateThemeToggleIcon_(true);
+      }, origin, function () { render(); });
     };
 
     document.getElementById('st-nav-side').onchange = function (e) { setNavSide_(e.target.value); };
@@ -18544,32 +18394,6 @@
       });
     }).observe(document.body, { childList: true, subtree: true });
   }
-  /**
-   * Celular (<= 640px): a barra fica com 4 abas fixas (Início, Extrato, Planejamento, Mais) e o "+" no CENTRO dela;
-   * Reembolsos desce pro painel "Mais" (com Contas, Categorias e Estabelecimentos). No PC nada muda: o "+" volta pra
-   * coluna ao lado da barra e Reembolsos pra barra. Os mesmos botões mudam de lugar (os eventos vão junto).
-   */
-  function applyMobileDock_() {
-    var nav = document.querySelector('nav.tabbar');
-    var fab = document.getElementById('fab-add');
-    var panel = document.getElementById('tabbar-more');
-    var more = document.getElementById('tab-more');
-    var side = document.querySelector('.dock-side');
-    var refunds = document.querySelector('.tab-btn[data-view="refunds"]');
-    if (!nav || !fab || !panel || !more || !side || !refunds) return;
-    var moved = false;
-    if (isMobileLayout_()) {
-      var budgets = nav.querySelector('.tab-btn[data-view="budgets"]');
-      if (fab.parentNode !== nav) { nav.insertBefore(fab, budgets); moved = true; }
-      fab.classList.add('fab-in-bar');
-      if (refunds.parentNode !== panel) { panel.insertBefore(refunds, panel.firstChild); moved = true; }
-    } else {
-      if (fab.parentNode !== side) { side.appendChild(fab); moved = true; }
-      fab.classList.remove('fab-in-bar');
-      if (refunds.parentNode !== nav) { nav.insertBefore(refunds, more); moved = true; }
-    }
-    if (moved) syncTabbar_(STATE.currentView); // refaz o "Mais" (mostra Reembolsos quando ativa) e mede os nomes de novo
-  }
   function setupSidebar_() {
     var nav = document.querySelector('nav.tabbar');
     if (!nav) return;
@@ -18653,9 +18477,6 @@
     setupViewportVars_();
     setupSidebar_();
     setupFabSpeedDial_();
-    applyMobileDock_();
-    if (MOBILE_MQ_) { if (MOBILE_MQ_.addEventListener) MOBILE_MQ_.addEventListener('change', applyMobileDock_); else if (MOBILE_MQ_.addListener) MOBILE_MQ_.addListener(applyMobileDock_); }
-    window.addEventListener('resize', applyMobileDock_); // redundante com o change acima, mas cobre giro/redimensionamento em que ele não vem
     setupReviewButton_();
     setupMarginSwitchZones_();
     setupScrollToTopButton_();
