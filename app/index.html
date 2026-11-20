@@ -848,6 +848,12 @@
     .tree-tl-item { animation: tl-pop .45s cubic-bezier(.34,1.4,.64,1) .3s backwards; }
     .tree-tl-item:nth-child(n+4) { animation-delay: .38s; }
     .tree-tl-item:nth-child(n+7) { animation-delay: .46s; }
+    /* "Faltam x pontos para y" entra junto com a barra (mesmo atraso e duração). */
+    .tree-need { animation: tree-need-in .8s cubic-bezier(.2,.8,.2,1) .3s backwards; }
+    @keyframes tree-need-in { from { opacity: 0; transform: translateY(6px); } }
+    /* Redesenho da janela (resposta do servidor depois de abrir): nada de entrar de novo. */
+    .tree-modal.tree-rerender .tree-bar > span, .tree-modal.tree-rerender .tree-tl-line > span,
+    .tree-modal.tree-rerender .tree-tl-item, .tree-modal.tree-rerender .tree-need { animation: none; }
     @keyframes bar-reveal { from { clip-path: inset(0 100% 0 0); } to { clip-path: inset(0 0 0 0); } }
     @keyframes tl-pop { from { opacity: 0; scale: .7; } }
   }
@@ -1859,6 +1865,20 @@
     .row-clickable:not([data-tx])::before { content: ''; position: absolute; left: -9px; top: 0; bottom: 0; width: 3px; border-radius: 2px; background: var(--primary); transform: scaleY(0); transition: transform .2s ease; pointer-events: none; }
     .row-clickable:not([data-tx]):hover::before { transform: scaleY(1); }
   }
+  /* ---- animação de troca de tema (docs/HANDOFF-theme-animation.md; ver changeTheme_) ---- */
+  /* O tema novo é pintado por cima do antigo; as duas "fotos" são camadas lisas, sem fade nem blend. */
+  ::view-transition-old(root),
+  ::view-transition-new(root) {
+    animation: none;
+    mix-blend-mode: normal;
+  }
+  ::view-transition-old(root) { z-index: 1; }
+  ::view-transition-new(root) { z-index: 2; }
+  html.theme-switching, html.theme-switching *, html.theme-switching *::before, html.theme-switching *::after { transition: none !important; }
+  /* Sem View Transitions: as cores deslizam por um instante. */
+  html.theme-fade, html.theme-fade *, html.theme-fade *::before, html.theme-fade *::after {
+    transition: background-color 0.1s ease, color 0.1s ease, border-color 0.1s ease, fill 0.1s ease, stroke 0.1s ease !important;
+  }
 </style>
 
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4"></script>
@@ -2122,13 +2142,59 @@
     // No app Android, a barra de notificações/navegação segue o tema escolhido aqui (versões antigas do app não têm setTheme).
     try { if (window.FinancasApp && typeof window.FinancasApp.setTheme === 'function') window.FinancasApp.setTheme(currentEffectiveTheme_() === 'dark'); } catch (e) { /* segue sem */ }
   }
+  /**
+   * Troca de tema com a animação do handoff (docs/HANDOFF-theme-animation.md do Automations Dashboard), copiada como está:
+   * o tema NOVO é pintado por cima do antigo num círculo que cresce a partir do centro do botão clicado (175 ms,
+   * cubic-bezier(0.22, 0.61, 0.36, 1), View Transitions). Sem a API: fade de cor de 112 ms. Com "reduzir movimento": troca na hora.
+   * theme = 'light' | 'dark' | '' (seguir o sistema). commit() roda DENTRO da transição e tem que mexer no estado e no
+   * HTML de forma síncrona (a "foto" nova é tirada logo depois).
+   */
+  function applyThemeAttribute_(theme) {
+    var root = document.documentElement;
+    if (theme) root.setAttribute('data-theme', theme); else root.removeAttribute('data-theme');
+  }
+  function changeTheme_(theme, commit, origin) {
+    var root = document.documentElement;
+    var reduced = false;
+    try { reduced = window.matchMedia('(prefers-reduced-motion: reduce)').matches; } catch (e) { reduced = false; }
+    if (reduced) { applyThemeAttribute_(theme); commit(); return; }
+    if (typeof document.startViewTransition === 'function') {
+      var x = origin && origin.x != null ? origin.x : window.innerWidth - 80;
+      var y = origin && origin.y != null ? origin.y : 30;
+      var radius = Math.hypot(Math.max(x, window.innerWidth - x), Math.max(y, window.innerHeight - y));
+      // Cores que deslizam sozinhas ficariam no meio do caminho na foto nova e atrasariam: sem transições enquanto ela é tirada.
+      root.classList.add('theme-switching');
+      var transition = document.startViewTransition(function () { applyThemeAttribute_(theme); commit(); });
+      var done = function () { root.classList.remove('theme-switching'); };
+      transition.finished.then(done, done);
+      window.setTimeout(done, 1000); // aba escondida pode nunca terminar a foto
+      transition.ready.then(function () {
+        root.animate(
+          { clipPath: ['circle(0px at ' + x + 'px ' + y + 'px)', 'circle(' + radius + 'px at ' + x + 'px ' + y + 'px)'] },
+          { duration: 175, easing: 'cubic-bezier(0.22, 0.61, 0.36, 1)', pseudoElement: '::view-transition-new(root)' }
+        );
+      }).catch(function () { /* sem animação, o tema já trocou */ });
+      return;
+    }
+    // Sem View Transitions: as cores deslizam por um instante.
+    root.classList.add('theme-fade');
+    applyThemeAttribute_(theme);
+    commit();
+    window.setTimeout(function () { root.classList.remove('theme-fade'); }, 112);
+  }
+  function themeOriginOf_(el) {
+    if (!el || !el.getBoundingClientRect) return undefined;
+    var r = el.getBoundingClientRect();
+    return { x: r.left + r.width / 2, y: r.top + r.height / 2 };
+  }
   /** Alterna e salva a preferência — a partir daqui, o tema do sistema para de valer. */
-  function toggleTheme_() {
+  function toggleTheme_(e) {
     var next = currentEffectiveTheme_() === 'dark' ? 'light' : 'dark';
-    try { localStorage.setItem('financas-theme', next); } catch (e) { /* segue sem salvar */ }
-    document.documentElement.setAttribute('data-theme', next);
-    updateThemeToggleIcon_();
-    render(); // recalcula cores dependentes de getComputedStyle (ex: legenda do gráfico)
+    changeTheme_(next, function () {
+      try { localStorage.setItem('financas-theme', next); } catch (err) { /* segue sem salvar */ }
+      updateThemeToggleIcon_();
+      render(); // recalcula cores dependentes de getComputedStyle (ex: legenda do gráfico)
+    }, themeOriginOf_(document.getElementById('theme-toggle')));
   }
 
   function escapeHtml(str) {
@@ -2227,7 +2293,7 @@
   /** Botões que trocam de cor ao toque (cápsulas ligadas/desligadas, botões com aria-pressed): a cor nova entra como um
    *  círculo que cresce a partir do ponto tocado (mesma ideia, 175 ms e curva do "claro/escuro" do Automations Dashboard).
    *  Como: antes da ação roda, uma cópia do botão com a aparência ANTIGA fica por cima; depois da ação, se a cor mudou,
-   *  a cópia recua (clip-path) até o ponto tocado revelando a nova por baixo; se não mudou, a cópia some na hora. */
+   *  uma cópia do botão NOVO cresce (clip-path) a partir do ponto tocado por cima da antiga; se não mudou, a cópia some na hora. */
   var FILL_EASING_ = 'cubic-bezier(0.22,0.61,0.36,1)', FILL_MS_ = 175;
   document.addEventListener('click', function (e) {
     if (!motionOk_ || !e.target.closest || !document.body.animate) return;
@@ -2256,10 +2322,19 @@
       var cr = cur.getBoundingClientRect();
       var rad = Math.ceil(Math.max(Math.hypot(x - cr.left, y - cr.top), Math.hypot(x - cr.right, y - cr.top),
         Math.hypot(x - cr.left, y - cr.bottom), Math.hypot(x - cr.right, y - cr.bottom)));
-      var cx = x - r.left, cy = y - r.top;
-      ghost.animate([{ clipPath: 'circle(' + rad + 'px at ' + cx + 'px ' + cy + 'px)' }, { clipPath: 'circle(0px at ' + cx + 'px ' + cy + 'px)' }],
-        { duration: FILL_MS_, easing: FILL_EASING_, fill: 'forwards' }).onfinish = finish;
-      setTimeout(finish, FILL_MS_ + 300);
+      // A cor NOVA nasce no ponto tocado e cresce até cobrir o botão: uma cópia do botão já mudado (clipada num círculo que cresce)
+      // fica por cima da cópia da aparência antiga, que segue parada por baixo até o fim.
+      var fresh = cur.cloneNode(true);
+      fresh.removeAttribute('id');
+      fresh.setAttribute('aria-hidden', 'true');
+      fresh.tabIndex = -1;
+      fresh.style.cssText = 'position:fixed;z-index:301;margin:0;pointer-events:none;box-sizing:border-box;left:' + cr.left + 'px;top:' + cr.top +
+        'px;width:' + cr.width + 'px;height:' + cr.height + 'px;scale:1;transition:none;animation:none';
+      document.body.appendChild(fresh);
+      var cx = x - cr.left, cy = y - cr.top;
+      fresh.animate([{ clipPath: 'circle(0px at ' + cx + 'px ' + cy + 'px)' }, { clipPath: 'circle(' + rad + 'px at ' + cx + 'px ' + cy + 'px)' }],
+        { duration: FILL_MS_, easing: FILL_EASING_, fill: 'forwards' }).onfinish = function () { fresh.remove(); finish(); };
+      setTimeout(function () { fresh.remove(); finish(); }, FILL_MS_ + 300);
     }, 0);
   }, true);
   // Brilho também ao PASSAR O MOUSE num card clicável (o toque abre menu/janela por cima e o brilho quase não era visto).
@@ -2273,7 +2348,7 @@
   /** Chaves e chips B · a bolinha da chave estica no caminho (usa o ::after do próprio input). */
   document.addEventListener('change', function (e) {
     var t = e.target;
-    if (!motionOk_ || !t || !t.matches || !t.matches('.budget-switch input') || !t.animate) return;
+    if (!motionOk_ || !t || !t.matches || !t.matches('.budget-switch input, .settings-switch input') || !t.animate) return;
     var from = t.checked ? 0 : 16, to = t.checked ? 16 : 0;
     try {
       t.animate([
@@ -4296,6 +4371,10 @@
   // separado de description em applyOptimisticEntry).
   var ACCOUNT_OPENING_DESCRIPTION_ = 'Início da conta - Saldo inicial';
   var ACCOUNT_CONSOLIDATION_DESCRIPTION_ = 'Consolidação de saldo (edição manual da conta)';
+  /** Saldo inicial / consolidação de uma conta (inclusive de cartão): é saldo que já existia, não dinheiro que entrou -- não vale como receita. */
+  function isAccountBalanceEntry_(t) {
+    return !!t && (!!t.balanceAnchor || t.description === ACCOUNT_OPENING_DESCRIPTION_ || t.description === ACCOUNT_CONSOLIDATION_DESCRIPTION_);
+  }
 
   /**
    * Prévia otimista SÓ pro Extrato — usada pelos dois lançamentos que o próprio sistema
@@ -5275,6 +5354,7 @@
         byLabel[label] += amount;
       } else if (t.kind === 'income') {
         if (t.forecastId === main.id) return; // o próprio salário já é o ponto de partida
+        if (isAccountBalanceEntry_(t)) return; // saldo inicial/consolidação de conta não é "outra receita"
         var inc = opts.netIncome(t);
         if (inc > 0.004) extra += inc;
       }
@@ -5362,7 +5442,7 @@
     if (!model) {
       return '<div class="card"><h2>Saldo do ciclo</h2><div class="empty-state">Cadastre seu salário como recorrente de receita mensal, com dia fixo, pra acompanhar o saldo entre um salário e outro.</div></div>';
     }
-    cycleExtraFilter_ = { kind: 'income', excludeForecastId: model.mainId, onlyAnalyzed: true, dateFrom: model.fromYmd, dateTo: model.toYmd };
+    cycleExtraFilter_ = { kind: 'income', excludeForecastId: model.mainId, onlyAnalyzed: true, excludeBalanceEntries: true, dateFrom: model.fromYmd, dateTo: model.toYmd };
     var denom = Math.max(model.start + model.extra, model.spentTotal, 1);
     var bar = '';
     if (model.remaining > 0) bar += '<span class="cycle-bar-left" style="width:' + (model.remaining / denom * 100).toFixed(2) + '%"></span>';
@@ -6629,6 +6709,7 @@
     if (f.kind && t.kind !== f.kind) return false;
     if (f.excludeForecastId && t.forecastId === f.excludeForecastId) return false;
     if (f.onlyAnalyzed && t.excludeFromAnalysis) return false;
+    if (f.excludeBalanceEntries && isAccountBalanceEntry_(t)) return false;
     if (f.text) {
       var needle = f.text.trim().toLowerCase();
       // (Number||0).toLocaleString('pt-BR') em vez de fmtMoney: fmtMoney usa o formato de
@@ -8284,6 +8365,7 @@
     // velocityPxMs: px/ms de deslocamento do CURSOR (não do scrollLeft, que anda ao
     // contrário -- ver document.onmousemove) no instante em que soltou.
     function startGlide_(velocityPxMs) {
+      cancelGlide_(); // nunca dois planadores ao mesmo tempo (o id do primeiro se perderia e ele nunca mais pararia)
       if (Math.abs(velocityPxMs) < GLIDE_MIN_PX_MS_) return;
       var v = Math.max(-GLIDE_MAX_PX_MS_, Math.min(GLIDE_MAX_PX_MS_, velocityPxMs));
       var lastT = performance.now();
@@ -8324,8 +8406,13 @@
       while (samples.length > 2 && now - samples[0].t > 80) samples.shift();
     };
     document.onmouseup = function () {
+      // Só o fim de um arrasto que COMEÇOU no gráfico conta. Antes, qualquer mouseup da página (o clique no "Hoje", por
+      // exemplo) reaproveitava o hasDragged/samples do arrasto anterior e disparava OUTRO planador por cima do que o
+      // botão acabara de cancelar -- o gráfico chegava em hoje e seguia rolando sozinho.
+      var wasDown = isDown;
       isDown = false;
-      if (!hasDragged) return;
+      if (!wasDown || !hasDragged) return;
+      hasDragged = false;
       // Só solta pointer-events no próximo tick -- o clique sintetizado do navegador
       // (que chega logo depois do mouseup, ainda de forma síncrona) precisa encontrar
       // pointer-events:none ainda ativo pra ser ignorado (ver comentário acima da função).
@@ -16850,7 +16937,7 @@
         (changed ? '<img class="tree-prev" alt="" src="' + treeImgSrc_(prevFile) + '">' : '') +
         '<div class="tree-fx">' + treeFxHtml_(view) + '</div></div></div>' +
       '<div class="tree-bar"><span style="width:' + pct.toFixed(1) + '%"></span></div>' +
-      '<div class="muted">' + (view.nextAt === null
+      '<div class="muted tree-need">' + (view.nextAt === null
         ? 'Você chegou ao último estágio. Continue usando para manter a árvore carregada.'
         : 'Faltam ' + treePts_(view.toNext, 'up') + ' pontos para ' + escapeHtml(TREE_STAGES_[view.stage].name.toLowerCase())) + '</div>';
     if (view.dryLevel > 0) {
@@ -16868,7 +16955,23 @@
     var oldWrap = modal.querySelector('.tree-img-wrap');
     var oldTimeline = modal.querySelector('.tree-tl-scroll');
     var keepLeft = oldTimeline ? oldTimeline.scrollLeft : null;
+    // A janela abre com o estado guardado e redesenha quando o servidor responde: o 2º desenho NÃO repete a animação de entrada
+    // das barras/textos (era a animação "duplicada"); se os pontos mudaram, a barra só anda da posição antiga pra nova.
+    var oldBarSpan = modal.querySelector('.tree-bar > span');
+    var rerender = !!oldBarSpan;
+    var oldBarWidth = oldBarSpan ? oldBarSpan.style.width : '';
     modal.innerHTML = treeModalHtml_(treeState_, treeHealth_, treeSeenGet_());
+    if (rerender) {
+      var treeBox = modal.querySelector('#tree-modal');
+      if (treeBox) treeBox.classList.add('tree-rerender');
+      var newBarSpan = modal.querySelector('.tree-bar > span');
+      if (newBarSpan && oldBarWidth && oldBarWidth !== newBarSpan.style.width) {
+        var targetWidth = newBarSpan.style.width;
+        newBarSpan.style.width = oldBarWidth;
+        void newBarSpan.offsetWidth;
+        newBarSpan.style.width = targetWidth;
+      }
+    }
     treePositionTimeline_(modal.querySelector('.tree-tl-scroll'), treeState_, keepLeft);
     treeSetupTimelineDrag_(modal.querySelector('.tree-tl-scroll'));
     treeSeenSet_(file);
@@ -17605,13 +17708,14 @@
     // Aparência
     document.getElementById('st-theme').onchange = function (e) {
       var value = e.target.value;
-      try {
-        if (value) localStorage.setItem('financas-theme', value); else localStorage.removeItem('financas-theme');
-      } catch (err) { /* segue sem salvar */ }
-      if (value) document.documentElement.setAttribute('data-theme', value);
-      else document.documentElement.removeAttribute('data-theme');
-      updateThemeToggleIcon_();
-      render();
+      var origin = themeOriginOf_(document.querySelector('[data-app-select="st-theme"]')); // o input é escondido: o círculo parte do botão do menu
+      changeTheme_(value, function () {
+        try {
+          if (value) localStorage.setItem('financas-theme', value); else localStorage.removeItem('financas-theme');
+        } catch (err) { /* segue sem salvar */ }
+        updateThemeToggleIcon_();
+        render();
+      }, origin);
     };
 
     document.getElementById('st-nav-side').onchange = function (e) { setNavSide_(e.target.value); };
@@ -17733,7 +17837,10 @@
   function measureTabLabels_() {
     document.querySelectorAll('.tab-btn .tab-label').forEach(function (l) {
       var text = l.firstElementChild || l; // o <span> interno tem a largura natural do nome
-      l.style.setProperty('--tw', Math.ceil(text.getBoundingClientRect().width) + 'px');
+      // offsetWidth (largura de layout), NÃO getBoundingClientRect: o botão apertado encolhe (button:active { scale: .86 }) e a
+      // medida saía 14% menor -- era o que cortava o nome da aba tocada ("Iníci").
+      var w = text === l ? l.scrollWidth : text.offsetWidth;
+      l.style.setProperty('--tw', (w + 1) + 'px');
     });
   }
   // A largura do nome é medida na hora da troca de aba; se a fonte (ou o peso 600 da aba ativa) ainda estava carregando, o nome
