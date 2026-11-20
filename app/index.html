@@ -2,7 +2,7 @@
 <html>
 <head>
   <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <title>Meu Cacau</title>
   <link rel="icon" type="image/png" href="../favicon.png">
   <script>
@@ -55,6 +55,7 @@
     --primary-contrast: #ffffff;
     --income: #4ebc76;
     --expense: #cc6666;
+    --cycle-over: #c4756e;
     /* Extremos "quase sem intensidade" do gradiente contínuo do calendário do Extrato
        (ver buildWeekCalendarHtml_/lerpColor_, JavaScript.html) -- --income/--expense
        continuam sendo o extremo de intensidade MÁXIMA (dia no topo do próprio grupo,
@@ -87,6 +88,7 @@
       --primary-contrast: #ffffff;
       --income: #5dcb85;
       --expense: #e78282;
+      --cycle-over: #c9807a;
       /* Extremo de baixa intensidade no escuro é escuro TAMBÉM (perto de --bg/--border),
          não um tom claro -- "pouca intensidade" tem que continuar perto do fundo, seja
          qual for o tema (ver --income-tint no :root claro). */
@@ -111,6 +113,7 @@
     --primary-contrast: #ffffff;
     --income: #5dcb85;
     --expense: #e78282;
+    --cycle-over: #c9807a;
     --income-tint: #1a2e22;
     --expense-tint: #2e1a1a;
     --warning: #e0b33f;
@@ -166,7 +169,7 @@
     max-width: 720px;
     margin: 0 auto;
     /* espaço pro fim da página não ficar atrás da barra de abas flutuante */
-    padding: 16px 16px calc(100px + env(safe-area-inset-bottom, 0px));
+    padding: 16px max(16px, env(safe-area-inset-right, 0px)) calc(100px + env(safe-area-inset-bottom, 0px)) max(16px, env(safe-area-inset-left, 0px));
   }
 
   h1, h2, h3 { margin: 0 0 8px; }
@@ -639,6 +642,23 @@
     transform: translateY(3px);
   }
 
+  /* Celular: "+" no centro da barra de abas (applyMobileDock_, JavaScript.html) -- cor cheia, é a ação principal; com o
+     teclado aberto a barra inteira some pra não cobrir o que se digita. */
+  @media (max-width: 640px) {
+    nav.tabbar > .fab.fab-in-bar {
+      width: 48px; height: 48px; margin: 0 4px; font-size: 28px;
+      background: var(--primary); color: var(--primary-contrast); border-color: transparent;
+      box-shadow: 0 4px 12px color-mix(in srgb, var(--primary) 45%, rgba(0,0,0,.25));
+    }
+    html.kb-open .dock-row, html.kb-open #scroll-to-top-btn, html.kb-open #corner-stack { visibility: hidden; opacity: 0; pointer-events: none; }
+    html.kb-open .dock-row > * { pointer-events: none; }
+  }
+  @media (max-width: 640px) and (prefers-reduced-motion: no-preference) {
+    nav.tabbar > .fab.fab-in-bar { transition: transform .15s ease, box-shadow .15s ease; }
+    nav.tabbar > .fab.fab-in-bar:active { transform: scale(.88); }
+    .dock-row { transition: opacity .18s ease, visibility .18s; }
+  }
+
   /* "Revisar pendências": círculo logo acima do "+" (mesmo eixo), com o ícone de checklist e a
      contagem num selo. Expande pro lado de dentro (por cima da barra) ao passar o mouse /
      segurar (ver setupReviewButton_); o ícone nunca sai do lugar -- do lado direito a ordem
@@ -740,18 +760,38 @@
   @keyframes home-msg-fade { from { opacity: 0; transform: translateY(14px) scale(.97); filter: blur(3px); } to { opacity: 1; transform: none; filter: none; } }
   @media (prefers-reduced-motion: reduce) { .home-msg-in { animation: none; } }
   /* Card "Saldo do ciclo": faixa larga (esquerda = o que sobrou, direita = o que já saiu, por nome). */
-  .cycle-head { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; flex-wrap: wrap; margin-bottom: 6px; }
+  .cycle-head { display: flex; justify-content: space-between; align-items: center; gap: 8px; margin-bottom: 2px; }
   .cycle-head h2 { margin-bottom: 0; }
+  /* Seletor de ciclo no cabeçalho: compacto, à direita (o botão do app é largura total por padrão). */
+  .cycle-head button.app-select { width: auto; max-width: 62%; margin-bottom: 0; padding: 6px 10px; font-size: 13px; }
+  .cycle-status { font-size: 13px; margin-bottom: 8px; }
   .cycle-big { font-size: 24px; font-weight: 600; margin-bottom: 10px; }
   .cycle-big .muted { font-size: 13px; font-weight: 400; }
-  .cycle-bar { display: flex; height: 26px; border-radius: 13px; overflow: hidden; background: var(--border); }
+  /* A barra é a receita do ciclo: o trecho cheio (marrom) é a sobra; o que já saiu fica VAZIO (trilho), com uma linha pontilhada
+     colorida onde cada grupo de gastos começa. Estourou: vermelho dessaturado cresce da direita pra esquerda. */
+  .cycle-bar-wrap { position: relative; padding: 4px 0; }
+  .cycle-bar { position: relative; display: flex; height: 26px; border-radius: 13px; overflow: hidden; background: var(--border); }
   .cycle-bar span { display: block; height: 100%; min-width: 2px; }
   .cycle-bar .cycle-bar-left { background: var(--primary); }
+  .cycle-bar .cycle-bar-over { position: absolute; top: 0; right: 0; background: var(--cycle-over); }
+  .cycle-mark { position: absolute; top: 0; bottom: 0; width: 0; margin-left: -1px; border-left: 2px dotted var(--c); pointer-events: none; filter: drop-shadow(0 0 1px var(--surface)); }
   .cycle-legend .cycle-dot-left { background: var(--primary); }
+  .cycle-legend .cycle-dot-over { background: var(--cycle-over); }
   .cycle-legend { display: flex; flex-wrap: wrap; gap: 6px 14px; margin-top: 10px; font-size: 12px; color: var(--text-muted); }
-  .cycle-extra-link { background: none; border: none; padding: 0; margin: 0; font: inherit; cursor: pointer; text-align: left; }
-  @media (hover: hover) and (prefers-reduced-motion: no-preference) { .cycle-extra-link { transition: translate .15s ease, opacity .15s ease, scale .12s ease; } .cycle-extra-link:hover { translate: 3px 0; opacity: .85; } }
+  .cycle-extra-link, .cycle-seg-link { background: none; border: none; padding: 0; margin: 0; font: inherit; cursor: pointer; text-align: left; }
+  .cycle-seg-link { color: inherit; }
+  @media (hover: hover) and (prefers-reduced-motion: no-preference) { .cycle-extra-link, .cycle-seg-link { transition: translate .15s ease, opacity .15s ease, scale .12s ease; } .cycle-extra-link:hover, .cycle-seg-link:hover { translate: 3px 0; opacity: .85; } }
+  .cycle-seg-link:active, .cycle-extra-link:active { scale: .97; }
   .cycle-legend i { display: inline-block; width: 9px; height: 9px; border-radius: 50%; margin-right: 5px; }
+  /* Entrada: o cheio cresce da esquerda, o vermelho da direita e as linhas pontilhadas aparecem por último (só ao entrar na aba ou trocar de ciclo). */
+  @media (prefers-reduced-motion: no-preference) {
+    .view-enter .cycle-bar-left, .cycle-anim .cycle-bar-left { animation: cycle-grow-l .8s cubic-bezier(.2,.8,.2,1) .3s backwards; }
+    .view-enter .cycle-bar-over, .cycle-anim .cycle-bar-over { animation: cycle-grow-r .8s cubic-bezier(.2,.8,.2,1) .3s backwards; }
+    .view-enter .cycle-mark, .cycle-anim .cycle-mark { animation: cycle-mark-in .5s ease .75s backwards; }
+    @keyframes cycle-grow-l { from { clip-path: inset(0 100% 0 0); } to { clip-path: inset(0 0 0 0); } }
+    @keyframes cycle-grow-r { from { clip-path: inset(0 0 0 100%); } to { clip-path: inset(0 0 0 0); } }
+    @keyframes cycle-mark-in { from { opacity: 0; } }
+  }
   .cycle-saved { margin-top: 14px; padding-top: 12px; border-top: 1px solid var(--border); }
   .cycle-saved-title { font-size: 13px; color: var(--text-muted); margin-bottom: 8px; }
   .cycle-saved-items { display: flex; flex-wrap: wrap; gap: 8px 28px; }
@@ -933,6 +973,162 @@
     overflow-y: auto;
     border-radius: 16px 16px 0 0;
     padding: 20px;
+  }
+
+  /* ---------- Celular (<= 640px): janelas viram "bottom sheets" que acompanham o teclado. O PC não muda. ----------
+     --vvh/--vvt (JavaScript.html, setupViewportVars_) = altura/topo da área visível já descontado o teclado. */
+  .sheet-grabber { display: none; }
+  .tx-more-wrap { display: none; }
+  @media (max-width: 640px) {
+    .modal-backdrop:not(.modal-center) {
+      inset: auto; left: 0; right: 0;
+      top: var(--vvt, 0px); height: var(--vvh, 100dvh);
+    }
+    .modal-backdrop:not(.modal-center) .modal {
+      max-height: calc(100% - 10px);
+      padding: 0 20px calc(20px + env(safe-area-inset-bottom, 0px));
+      overscroll-behavior: contain;
+      scroll-padding: 40px 0 110px;
+      -webkit-overflow-scrolling: touch;
+    }
+    .kb-open .modal-backdrop:not(.modal-center) .modal { padding-bottom: 20px; }
+    /* Alça: fica no topo mesmo com a janela rolada; arrastar pra baixo fecha (attachSheetDrag_). */
+    .modal-backdrop:not(.modal-center) .sheet-grabber {
+      display: block; position: sticky; top: 0; z-index: 3;
+      height: 30px; margin: 0 -20px 2px; background: var(--surface);
+      border-radius: 16px 16px 0 0; touch-action: none; cursor: grab;
+    }
+    .sheet-grabber::before {
+      content: ''; position: absolute; left: 50%; top: 11px; width: 44px; height: 5px;
+      margin-left: -22px; border-radius: 3px; background: var(--text-muted); opacity: .45;
+    }
+    /* Botão principal preso no fim da janela, sempre acima do teclado. */
+    .modal .sheet-actions {
+      position: sticky; bottom: 0; z-index: 3;
+      margin: 10px -20px calc(-20px - env(safe-area-inset-bottom, 0px));
+      padding: 12px 20px calc(16px + env(safe-area-inset-bottom, 0px));
+      background: var(--surface); box-shadow: 0 -10px 14px -12px rgba(0,0,0,.28);
+    }
+    .kb-open .modal .sheet-actions { margin-bottom: -20px; padding-bottom: 14px; }
+    .sheet-actions > button:only-child { width: 100%; padding: 13px 16px; }
+    .sheet-actions button, .sheet-actions .btn-pair button { min-height: 48px; }
+
+    /* Lançamento: fluxo curto -- Valor, Categoria, (Descrição), Conta; o resto em "Mais detalhes". */
+    #tx-form-fields { display: flex; flex-direction: column; }
+    #tx-form-fields > .tx-f-amount { order: 1; }
+    #tx-form-fields > .tx-f-category { order: 2; }
+    #tx-form-fields > .tx-f-from { order: 2; }
+    #tx-form-fields > .tx-f-to { order: 3; }
+    #tx-form-fields > .tx-f-account { order: 3; }
+    #tx-form-fields > .tx-f-bill { order: 4; }
+    #tx-form-fields > .tx-f-who { order: 4; }
+    #tx-form-fields > .tx-more-wrap { order: 5; display: block; }
+    #tx-form-fields > .tx-f-date { order: 6; }
+    #tx-form-fields > .tx-f-desc { order: 7; }
+    #tx-form-fields:not(.tx-more-open) > .tx-detail { display: none !important; }
+    .tx-f-amount input#t-amount { font-size: 24px; font-weight: 600; padding: 12px 14px; }
+    .tx-f-amount > div:first-child { flex: 2 1 0 !important; }
+    .tx-f-amount .field-action-group { flex-wrap: wrap; gap: 0 10px; min-width: 0; max-width: 100%; }
+    .tx-f-category .capsule-field, .tx-f-account .capsule-field, .tx-f-from .capsule-field, .tx-f-to .capsule-field { gap: 8px; }
+    .tx-f-category .capsule, .tx-f-account .capsule, .tx-f-from .capsule, .tx-f-to .capsule {
+      padding: 10px 16px; font-size: 14px; min-height: 44px; display: inline-flex; align-items: center; justify-content: center;
+    }
+    .tx-f-account .acc-color-name, .tx-f-from .acc-color-name, .tx-f-to .acc-color-name { font-size: 13px; }
+    .tx-more-toggle {
+      display: flex; align-items: center; justify-content: center; gap: 6px; width: 100%; min-height: 44px;
+      margin: 2px 0 10px; background: transparent; color: var(--text-muted); border: 1px dashed var(--border); border-radius: 12px;
+      font-size: 14px; font-weight: 600;
+    }
+    .tx-more-chevron { transition: transform .25s ease; }
+    .tx-more-toggle[aria-expanded="true"] .tx-more-chevron { transform: rotate(180deg); }
+    /* Campos de texto com altura confortável pro toque; 16px evita o zoom automático do iOS ao focar. */
+    .modal input, .modal select, .modal textarea { font-size: 16px; min-height: 44px; }
+  }
+  @media (max-width: 640px) and (prefers-reduced-motion: no-preference) {
+    #tx-form-fields.tx-more-open > .tx-detail { animation: tx-detail-in .3s cubic-bezier(.2,.8,.2,1) backwards; }
+    @keyframes tx-detail-in { from { opacity: 0; transform: translateY(-8px); } }
+    .tx-more-toggle { transition: background-color .2s ease, transform .15s ease; }
+    .tx-more-toggle:active { transform: scale(.98); background: var(--border); }
+  }
+  @media (max-width: 640px) and (prefers-reduced-motion: reduce) {
+    .tx-more-chevron { transition: none; }
+  }
+
+  /* Menu de escolha no celular (openDropdownSheet_): folha que sobe da base, linhas altas, busca no topo se a lista é longa. */
+  .dd-sheet-backdrop {
+    position: fixed; inset: auto; left: 0; right: 0; top: var(--vvt, 0px); height: var(--vvh, 100dvh);
+    z-index: 220; display: flex; align-items: flex-end; justify-content: center; background: rgba(0,0,0,.4);
+  }
+  .dd-sheet {
+    width: 100%; max-width: 720px; max-height: calc(100% - 24px); display: flex; flex-direction: column;
+    background: var(--surface); border-radius: 18px 18px 0 0; padding: 0 12px calc(12px + env(safe-area-inset-bottom, 0px));
+    box-shadow: 0 -8px 30px rgba(0,0,0,.25); overscroll-behavior: contain;
+  }
+  .kb-open .dd-sheet { padding-bottom: 12px; }
+  .dd-sheet .sheet-grabber {
+    display: block; position: relative; flex: none; height: 30px; margin: 0 -12px; touch-action: none; cursor: grab;
+  }
+  .dd-sheet-search { flex: none; margin: 0 4px 8px; width: calc(100% - 8px); font-size: 16px; min-height: 46px; border-radius: 12px; }
+  .dd-sheet-list { flex: 1 1 auto; min-height: 0; overflow-y: auto; -webkit-overflow-scrolling: touch; overscroll-behavior: contain; }
+  .dd-sheet-option {
+    display: flex; align-items: center; justify-content: space-between; gap: 12px;
+    min-height: 52px; padding: 10px 14px; border-radius: 12px; font-size: 16px; cursor: pointer;
+    -webkit-tap-highlight-color: transparent;
+  }
+  .dd-sheet-option:active { background: var(--bg); }
+  .dd-sheet-option.active { background: color-mix(in srgb, var(--primary) 14%, transparent); color: var(--primary); font-weight: 600; }
+  .dd-sheet-check { flex: none; width: 22px; height: 22px; fill: none; stroke: currentColor; stroke-width: 2.6; stroke-linecap: round; stroke-linejoin: round; }
+  .dd-sheet-empty { padding: 22px 14px; text-align: center; color: var(--text-muted); }
+  @media (min-width: 641px) { .dd-sheet-backdrop { display: none; } }
+  @media (prefers-reduced-motion: no-preference) {
+    .dd-sheet-backdrop.dd-sheet-bd-in { animation: modal-fade .22s ease backwards; }
+    .dd-sheet.dd-sheet-in { animation: modal-rise .34s cubic-bezier(.2,.8,.2,1) backwards; }
+    .dd-sheet-backdrop.dd-sheet-out { animation: modal-fade-out .17s ease forwards; }
+    .dd-sheet-backdrop.dd-sheet-out .dd-sheet { animation: modal-sink .17s ease-in forwards; }
+    @keyframes modal-fade-out { to { opacity: 0; } }
+    @keyframes modal-sink { to { transform: translateY(100%); } }
+    .dd-sheet-option { transition: background-color .15s ease; }
+    .dd-sheet-option.active .dd-sheet-check { animation: dd-check-in .3s cubic-bezier(.34,1.5,.64,1) backwards; }
+    @keyframes dd-check-in { from { transform: scale(.4); opacity: 0; } }
+  }
+
+  /* Celular: linhas do Extrato compactas (categoria e valor na mesma linha, detalhes embaixo, tudo com reticências),
+     deslizar pra esquerda exclui (applyRowSwipe, JavaScript.html) e o aviso "Desfazer" fica acima da barra de abas. */
+  .row-swipe-wrap { position: relative; overflow: hidden; }
+  .row-swipe-under {
+    position: absolute; inset: 0; display: flex; align-items: center; justify-content: flex-end; gap: 8px;
+    padding-right: 18px; background: var(--expense); color: #fff; font-size: 14px; font-weight: 600;
+  }
+  .row-swipe-under svg { width: 22px; height: 22px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; flex: none; }
+  .row-swiping { background: var(--surface); position: relative; }
+  #undo-toast-container {
+    position: fixed; left: 50%; transform: translateX(-50%); z-index: 100; display: flex; flex-direction: column; align-items: center; gap: 8px;
+    bottom: calc(var(--dock-bottom) + 70px); width: min(92vw, 420px); pointer-events: none;
+  }
+  .toast.toast-undo {
+    position: relative; overflow: hidden; display: flex; align-items: center; justify-content: space-between; gap: 16px;
+    width: 100%; box-sizing: border-box; padding: 6px 6px 6px 16px; font-size: 14px; pointer-events: auto;
+    box-shadow: 0 6px 20px rgba(0,0,0,.3);
+  }
+  .toast-undo-btn { background: transparent; color: inherit; font-weight: 800; letter-spacing: .04em; text-transform: uppercase; padding: 10px 14px; min-height: 44px; border-radius: 8px; font-size: 13px; }
+  .toast-undo-bar { position: absolute; left: 0; bottom: 0; height: 3px; width: 100%; background: currentColor; opacity: .5; transform-origin: 0 50%; animation: undo-bar linear forwards; }
+  @keyframes undo-bar { to { transform: scaleX(0); } }
+  @media (prefers-reduced-motion: no-preference) {
+    .row-swipe-under svg { transition: transform .18s cubic-bezier(.34,1.5,.64,1); }
+    .row-swipe-wrap.armed .row-swipe-under svg { transform: scale(1.25) rotate(-8deg); }
+    .row-swipe-under { transition: background-color .15s ease; }
+    .row-swipe-wrap.armed .row-swipe-under { background: color-mix(in srgb, var(--expense) 82%, #000); }
+    .toast.toast-undo { animation: undo-toast-rise .35s cubic-bezier(.2,.8,.2,1) backwards; }
+    @keyframes undo-toast-rise { from { transform: translateY(24px); opacity: 0; } }
+    .toast-undo-btn:active { background: color-mix(in srgb, currentColor 18%, transparent); }
+  }
+  @media (max-width: 640px) {
+    .row-clickable[data-tx], .row.row-clickable[data-tx] { align-items: flex-start; padding: 11px 0; min-height: 52px; box-sizing: border-box; }
+    .row .tx-txt { flex: 1 1 auto; min-width: 0; }
+    .row .tx-txt br { display: none; }
+    .row .tx-l1, .row .tx-l2 { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .row .tx-l2 { margin-top: 2px; }
+    .row[data-tx] > span:last-child { padding-top: 0; }
   }
 
   .empty-state { text-align: center; color: var(--text-muted); padding: 24px 0; }
@@ -1970,7 +2166,7 @@
 
   <script>var FINANCAS_MULTIUSER = true;</script>
   <script src="https://accounts.google.com/gsi/client" async defer></script>
-  <script src="cacau-web.js?v=a098e8a222"></script>
+  <script src="cacau-web.js?v=d8d23cdd98"></script>
 <script>
   var STATE = {
     accounts: [],
@@ -3050,6 +3246,7 @@
   function openDropdownMenu_(anchorEl, options, onSelect) {
     if (dropdownClosedByAnchor_ === anchorEl) { dropdownClosedByAnchor_ = null; return; }
     closeActiveConfirmPopover_();
+    if (isMobileLayout_()) { openDropdownSheet_(anchorEl, options, onSelect); return; }
     var pop = document.createElement('div');
     pop.id = 'confirm-popover';
     pop.className = 'confirm-popover dropdown-popover';
@@ -3098,6 +3295,67 @@
     pop.querySelectorAll('.dropdown-option').forEach(function (el) {
       el.onclick = function () { cleanup(); onSelect(el.dataset.value); };
     });
+  }
+
+  /**
+   * Celular: o menu de escolha vira uma folha que sobe da base da tela, com linhas altas (>= 52px, alvo de toque),
+   * busca no topo quando a lista é longa (> 7 itens), a opção atual marcada, e fecha tocando fora, arrastando a alça
+   * pra baixo ou com Esc/voltar. Mesmo contrato de openDropdownMenu_: options [{ value, label, selected }].
+   */
+  var DD_SHEET_SEARCH_MIN_ = 8;
+  function openDropdownSheet_(anchorEl, options, onSelect) {
+    var rootEl = document.createElement('div');
+    rootEl.id = 'dd-sheet-backdrop';
+    rootEl.className = 'dd-sheet-backdrop' + (motionOk_ ? ' dd-sheet-bd-in' : '');
+    var withSearch = options.length >= DD_SHEET_SEARCH_MIN_;
+    rootEl.innerHTML = '<div class="dd-sheet' + (motionOk_ ? ' dd-sheet-in' : '') + '" role="listbox">' +
+      '<div class="sheet-grabber" aria-hidden="true"></div>' +
+      (withSearch ? '<input type="search" class="dd-sheet-search" placeholder="Buscar" aria-label="Buscar" enterkeyhint="search" autocomplete="off">' : '') +
+      '<div class="dd-sheet-list"></div></div>';
+    document.body.appendChild(rootEl);
+    var sheet = rootEl.querySelector('.dd-sheet');
+    var list = rootEl.querySelector('.dd-sheet-list');
+    var search = rootEl.querySelector('.dd-sheet-search');
+    var closed = false;
+    if (anchorEl && anchorEl.classList) anchorEl.classList.add('dd-btn', 'dd-open');
+    function norm_(t) { return String(t || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase(); }
+    function renderList_(q) {
+      var nq = norm_(q).trim();
+      var shown = options.filter(function (o) { return !nq || norm_(o.label).indexOf(nq) !== -1; });
+      list.innerHTML = shown.length ? shown.map(function (opt) {
+        return '<div class="dd-sheet-option' + (opt.selected ? ' active' : '') + '" role="option" data-value="' + escapeHtml(opt.value) + '">' +
+          '<span class="dd-sheet-label">' + escapeHtml(opt.label) + '</span>' +
+          (opt.selected ? '<svg class="dd-sheet-check" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg>' : '') + '</div>';
+      }).join('') : '<div class="dd-sheet-empty">Nada encontrado</div>';
+      Array.prototype.forEach.call(list.querySelectorAll('.dd-sheet-option'), function (el) {
+        el.onclick = function () { close_(); onSelect(el.dataset.value); };
+      });
+    }
+    function cleanup_() {
+      if (closed) return;
+      closed = true;
+      document.removeEventListener('keydown', onKey_, true);
+      if (anchorEl && anchorEl.classList) anchorEl.classList.remove('dd-open');
+      activeConfirmPopoverCleanup_ = null;
+      rootEl.remove();
+    }
+    function close_() {
+      if (closed) return;
+      if (!motionOk_) { cleanup_(); return; }
+      rootEl.classList.add('dd-sheet-out');
+      setTimeout(cleanup_, 170);
+    }
+    function onKey_(e) {
+      if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); close_(); }
+    }
+    document.addEventListener('keydown', onKey_, true);
+    rootEl.onclick = function (e) { if (e.target === rootEl) close_(); };
+    attachSheetDrag_(rootEl, cleanup_);
+    activeConfirmPopoverCleanup_ = cleanup_;
+    renderList_('');
+    if (search) search.addEventListener('input', function () { renderList_(search.value); });
+    var current = list.querySelector('.dd-sheet-option.active');
+    if (current) setTimeout(function () { try { current.scrollIntoView({ block: 'center' }); } catch (_) { /* navegador antigo */ } }, 0);
   }
 
   // ---------- campo de escolha do app (no lugar do <select> nativo) ----------
@@ -4633,7 +4891,8 @@
     // (linha acima) já não tiver mais ele — até lá, removê-lo cedo demais de
     // deletingIds fazia o lançamento reaparecer por alguns segundos ao remover 2 em
     // sequência rápida.
-    STATE.deletingIds = [];
+    // (os que ainda aguardam o "Desfazer" do swipe não foram pro servidor: continuam escondidos até o prazo.)
+    STATE.deletingIds = (typeof pendingUndoDeletes_ !== 'undefined' ? pendingUndoDeletes_ : []).map(function (e) { return e.id; });
     STATE.pendingEntries = sortPendingEntries_((data.pendingEntries || []).filter(function (p) { return !pendingEntryRemovals_[p.id]; }));
     STATE.forecasts = reapplyPendingEdits_(preserveOptimisticTempEntries_(STATE.forecasts, data.forecasts || []), pendingForecastEdits_);
     STATE.budgets = reapplyPendingEdits_(preserveOptimisticTempEntries_(STATE.budgets, data.budgets || []), pendingBudgetEdits_);
@@ -5263,6 +5522,11 @@
 
     var cycleExtraBtn = document.getElementById('cycle-extra-btn');
     if (cycleExtraBtn) cycleExtraBtn.onclick = viewCycleExtraIncome_;
+    document.querySelectorAll('.cycle-seg-link').forEach(function (el) {
+      el.onclick = function () { openCycleExtratoWith_(cycleSegmentFilters_[Number(el.getAttribute('data-cycle-seg'))]); };
+    });
+    var cycleSelect = document.getElementById('cycle-select');
+    if (cycleSelect) cycleSelect.onchange = function (e) { STATE.cycleOffset = Number(e.target.value) || 0; STATE.cycleAnimate = true; render(); };
     setupBudgetBarMenus_(root);
 
     document.querySelectorAll('#view-root [data-tx]').forEach(function (el) {
@@ -5300,7 +5564,9 @@
   // PREVISTO da maior receita recorrente mensal de dia fixo (o "salário"); cada despesa já lançada tira um pedaço
   // (agrupado pelo nome do recorrente, senão do orçamento da categoria, senão "Orçamento geral") e as outras
   // receitas devolvem volume. Só o que de fato aconteceu: nada de projeção. Cartão conta na data da compra.
-  var CYCLE_BALANCE_PALETTE_ = ['#b9916a', '#d3b28d', '#a07a55', '#e3cdb0', '#c9a27a', '#ecdcc6']; // tons de areia: o que já saiu (a sobra é o marrom forte)
+  // Cores dessaturadas e bem distintas entre si (nada de marrom: a sobra é o marrom forte e o estouro é o vermelho): cada uma marca
+  // onde um grupo de gastos começa na barra (linha pontilhada) e pinta a bolinha da legenda.
+  var CYCLE_BALANCE_PALETTE_ = ['#668cb8', '#d0b05a', '#9585c2', '#8db56f', '#c98aa0', '#7fc4b6'];
   var CYCLE_BALANCE_MAX_SEGMENTS_ = 6;
   var CYCLE_BALANCE_GENERAL_LABEL_ = 'Orçamento geral';
   var SAVED_MIN_AMOUNT_ = 50;
@@ -5324,6 +5590,26 @@
     var nextYmd = startOf(ymOfMonthIndex_(idx + 1));
     return { fromYmd: fromYmd, toYmd: addDaysYmd_(nextYmd, -1), nextYmd: nextYmd };
   }
+  /** Em qual grupo da barra uma despesa cai: nome do recorrente, senão do orçamento da categoria, senão "Orçamento geral". */
+  function cycleSegmentLabel_(t, forecastById, realBudgets) {
+    var f = t.forecastId ? forecastById[t.forecastId] : null;
+    if (f) return f.label;
+    var b = realBudgets.filter(function (x) { return (x.categoryIds || []).indexOf(t.categoryId) !== -1; })[0];
+    return b ? b.categoryName : CYCLE_BALANCE_GENERAL_LABEL_;
+  }
+  /** O mesmo rótulo, com o STATE atual (filtro do Extrato vindo da legenda do card); os mapas ficam em cache por lista. */
+  var cycleLabelCtx_ = { fc: null, bd: null, forecastById: {}, realBudgets: [] };
+  function cycleSegmentLabelOfTx_(t) {
+    if (cycleLabelCtx_.fc !== STATE.forecasts || cycleLabelCtx_.bd !== STATE.budgets) {
+      var byId = {};
+      (STATE.forecasts || []).forEach(function (f) { byId[f.id] = f; });
+      cycleLabelCtx_ = {
+        fc: STATE.forecasts, bd: STATE.budgets, forecastById: byId,
+        realBudgets: (STATE.budgets || []).filter(function (b) { return !b.archived && !b.isUnbudgetedCatchAll; })
+      };
+    }
+    return cycleSegmentLabel_(t, cycleLabelCtx_.forecastById, cycleLabelCtx_.realBudgets);
+  }
   /**
    * Modelo do card. opts = { today, forecasts, transactions, budgets, deletingIds, netExpense(tx), netIncome(tx) }.
    * null = sem salário cadastrado. segments = o que já saiu, do maior pro menor (além de CYCLE_BALANCE_MAX_SEGMENTS_
@@ -5343,13 +5629,7 @@
       if (t.kind === 'expense') {
         var amount = opts.netExpense(t);
         if (!(amount > 0.004)) return;
-        var label = CYCLE_BALANCE_GENERAL_LABEL_;
-        var f = t.forecastId ? forecastById[t.forecastId] : null;
-        if (f) label = f.label;
-        else {
-          var b = realBudgets.filter(function (x) { return (x.categoryIds || []).indexOf(t.categoryId) !== -1; })[0];
-          if (b) label = b.categoryName;
-        }
+        var label = cycleSegmentLabel_(t, forecastById, realBudgets);
         if (!(label in byLabel)) { byLabel[label] = 0; labels.push(label); }
         byLabel[label] += amount;
       } else if (t.kind === 'income') {
@@ -5359,17 +5639,19 @@
         if (inc > 0.004) extra += inc;
       }
     });
-    var segments = labels.map(function (l) { return { label: l, amount: byLabel[l] }; })
+    var segments = labels.map(function (l) { return { label: l, labels: [l], amount: byLabel[l] }; })
       .sort(function (a, b) { return b.amount - a.amount; });
     if (segments.length > CYCLE_BALANCE_MAX_SEGMENTS_) {
       var rest = segments.slice(CYCLE_BALANCE_MAX_SEGMENTS_ - 1);
       segments = segments.slice(0, CYCLE_BALANCE_MAX_SEGMENTS_ - 1).concat([{
-        label: 'Outros', amount: rest.reduce(function (s, x) { return s + x.amount; }, 0)
+        label: 'Outros', labels: rest.reduce(function (all, x) { return all.concat(x.labels); }, []),
+        amount: rest.reduce(function (s, x) { return s + x.amount; }, 0)
       }]);
     }
     var spentTotal = segments.reduce(function (s, x) { return s + x.amount; }, 0);
     return {
       incomeLabel: main.label, mainId: main.id, start: main.expectedAmount, extra: extra, spentTotal: spentTotal,
+      income: main.expectedAmount + extra, over: Math.max(0, spentTotal - (main.expectedAmount + extra)),
       remaining: main.expectedAmount - spentTotal + extra, segments: segments,
       fromYmd: win.fromYmd, toYmd: win.toYmd, daysLeft: daysBetweenYmd_(opts.today, win.nextYmd)
     };
@@ -5423,37 +5705,89 @@
   }
   /** Filtro do Extrato pra "+ R$ X de outras receitas": receitas do ciclo, menos o próprio salário e o que está fora das análises. */
   var cycleExtraFilter_ = null;
-  function viewCycleExtraIncome_() {
-    if (!cycleExtraFilter_) return;
-    STATE.txFilters = Object.assign({}, cycleExtraFilter_);
-    STATE.txFiltersExpanded = false; // colapsado, o card mostra o que está filtrando (chip "Outras receitas")
+  var cycleSegmentFilters_ = [];
+  function openCycleExtratoWith_(filter) {
+    if (!filter) return;
+    STATE.txFilters = Object.assign({}, filter);
+    STATE.txFiltersExpanded = false; // colapsado, o card mostra o que está filtrando (chip com o nome do grupo)
     STATE.txVisibleCount = TX_PAGE_SIZE;
     STATE.txCalendarScrollLeft = null;
     STATE.currentView = 'transactions';
     delete scrollPositions_.transactions;
     render();
   }
+  function viewCycleExtraIncome_() { openCycleExtratoWith_(cycleExtraFilter_); }
+  /** Ciclos do seletor do card: o atual e os anteriores, até o primeiro lançamento (no máximo 36). offset 0 = atual, -1 = o anterior... */
+  function cycleBalanceCycles_(main, today, transactions) {
+    var minDate = '';
+    (transactions || []).forEach(function (t) { if (t.date && (!minDate || t.date < minDate)) minDate = t.date; });
+    var list = [];
+    var win = cycleBalanceWindowAt_(main.dayOfMonth, today);
+    for (var i = 0; i < 36; i++) {
+      list.push({ offset: -i, fromYmd: win.fromYmd, toYmd: win.toYmd });
+      if (!minDate || win.fromYmd <= minDate) break;
+      win = cycleBalanceWindowAt_(main.dayOfMonth, addDaysYmd_(win.fromYmd, -1));
+    }
+    return list;
+  }
+  /** "05/11 a 04/12" (com o ano de 2 dígitos só nas pontas que não são do ano corrente). */
+  function cycleRangeLabel_(c, today) {
+    var y = today.slice(0, 4);
+    function d(ymd) { return fmtDateShort_(ymd) + (ymd.slice(0, 4) !== y ? '/' + ymd.slice(2, 4) : ''); }
+    return d(c.fromYmd) + ' a ' + d(c.toYmd);
+  }
+  /**
+   * Posições (em % da largura) das linhas pontilhadas que marcam onde cada grupo de gastos COMEÇA na barra.
+   * A barra é a receita do ciclo: o trecho cheio (sobra) fica à esquerda e o gasto, "vazio", à direita dele. Estourou o ciclo:
+   * não há trecho cheio e os grupos se distribuem pela barra toda, proporcionais ao total gasto.
+   */
+  function cycleBarLayout_(model) {
+    var income = Math.max(model.income, 1);
+    var overflow = model.remaining < 0;
+    var leftPct = overflow ? 0 : Math.max(0, model.remaining) / income * 100;
+    var scale = overflow ? 100 / Math.max(model.spentTotal, 1) : 100 / income;
+    var acc = 0;
+    var marks = model.segments.map(function (seg) {
+      var pos = Math.min(99.5, leftPct + acc * scale);
+      acc += seg.amount;
+      return pos;
+    });
+    return { leftPct: leftPct, overPct: overflow ? Math.min(100, model.over / income * 100) : 0, marks: marks, overflow: overflow };
+  }
   function cycleBalanceHtml_() {
     var today = todayYmd();
+    var main = cycleBalanceMainIncome_(STATE.forecasts);
+    var cycles = main ? cycleBalanceCycles_(main, today, STATE.allTransactions) : [];
+    var offset = Math.max(-(Math.max(cycles.length, 1) - 1), Math.min(0, Number(STATE.cycleOffset) || 0));
+    var chosen = cycles.filter(function (c) { return c.offset === offset; })[0];
     var model = cycleBalanceModel_({
-      today: today, forecasts: STATE.forecasts, transactions: STATE.allTransactions, budgets: STATE.budgets,
+      today: chosen && offset !== 0 ? chosen.fromYmd : today, forecasts: STATE.forecasts, transactions: STATE.allTransactions, budgets: STATE.budgets,
       deletingIds: STATE.deletingIds, netExpense: netAmountOfPassive_, netIncome: netContributionOfActive_
     });
     if (!model) {
       return '<div class="card"><h2>Saldo do ciclo</h2><div class="empty-state">Cadastre seu salário como recorrente de receita mensal, com dia fixo, pra acompanhar o saldo entre um salário e outro.</div></div>';
     }
     cycleExtraFilter_ = { kind: 'income', excludeForecastId: model.mainId, onlyAnalyzed: true, excludeBalanceEntries: true, dateFrom: model.fromYmd, dateTo: model.toYmd };
-    var denom = Math.max(model.start + model.extra, model.spentTotal, 1);
-    var bar = '';
-    if (model.remaining > 0) bar += '<span class="cycle-bar-left" style="width:' + (model.remaining / denom * 100).toFixed(2) + '%"></span>';
+    var layout = cycleBarLayout_(model);
+    var marks = '';
+    cycleSegmentFilters_ = [];
     model.segments.forEach(function (seg, i) {
-      bar += '<span style="width:' + (seg.amount / denom * 100).toFixed(2) + '%;background:' + CYCLE_BALANCE_PALETTE_[i % CYCLE_BALANCE_PALETTE_.length] + '" title="' + escapeHtml(seg.label + ': ' + fmtMoneyNoCents_(seg.amount)) + '"></span>';
+      marks += '<i class="cycle-mark" style="left:' + layout.marks[i].toFixed(2) + '%;--c:' + CYCLE_BALANCE_PALETTE_[i % CYCLE_BALANCE_PALETTE_.length] +
+        '" title="' + escapeHtml(seg.label + ': ' + fmtMoneyNoCents_(seg.amount)) + '"></i>';
+      cycleSegmentFilters_.push({
+        kind: 'expense', onlyAnalyzed: true, dateFrom: model.fromYmd, dateTo: model.toYmd, cycleLabels: seg.labels, cycleSegmentName: seg.label
+      });
     });
-    var legend = (model.remaining > 0 ? '<span><i class="cycle-dot-left"></i>Sobra ' + fmtMoneyNoCents_(model.remaining) + '</span>' : '') + model.segments.map(function (seg, i) {
-      return '<span><i style="background:' + CYCLE_BALANCE_PALETTE_[i % CYCLE_BALANCE_PALETTE_.length] + '"></i>' + escapeHtml(seg.label) + ' ' + fmtMoneyNoCents_(seg.amount) + '</span>';
-    }).join('');
+    var bar = (layout.leftPct > 0 ? '<span class="cycle-bar-left" style="width:' + layout.leftPct.toFixed(2) + '%"></span>' : '') +
+      (layout.overPct > 0 ? '<span class="cycle-bar-over" style="width:' + layout.overPct.toFixed(2) + '%" title="' + escapeHtml('Passou ' + fmtMoneyNoCents_(model.over) + ' da receita do ciclo') + '"></span>' : '');
+    var legend = (model.remaining > 0 ? '<span><i class="cycle-dot-left"></i>Sobra ' + fmtMoneyNoCents_(model.remaining) + '</span>' : '') +
+      (layout.overflow ? '<span><i class="cycle-dot-over"></i>Passou ' + fmtMoneyNoCents_(model.over) + '</span>' : '') +
+      model.segments.map(function (seg, i) {
+        return '<button type="button" class="cycle-seg-link" data-cycle-seg="' + i + '" title="Ver no Extrato"><i style="background:' +
+          CYCLE_BALANCE_PALETTE_[i % CYCLE_BALANCE_PALETTE_.length] + '"></i>' + escapeHtml(seg.label) + ' ' + fmtMoneyNoCents_(seg.amount) + '</button>';
+      }).join('');
     if (model.extra > 0) legend += '<button type="button" class="cycle-extra-link amount-income" id="cycle-extra-btn" title="Ver essas receitas no Extrato">+ ' + fmtMoneyNoCents_(model.extra) + ' de outras receitas</button>';
-    var big = model.remaining < 0
+    var big = layout.overflow
       ? '<span class="amount-expense">-' + fmtMoneyNoCents_(-model.remaining) + '</span> <span class="muted">estourou o ciclo</span>'
       : fmtMoneyNoCents_(model.remaining) + ' <span class="muted">de ' + fmtMoneyNoCents_(model.start) + '</span>';
 
@@ -5469,12 +5803,19 @@
     if (measures.belowCaps !== null) items.push('<div><strong>' + fmtMoneyNoCents_(measures.belowCaps) + '</strong><span class="muted">gasto abaixo dos tetos dos orçamentos</span></div>');
     if (items.length) saved = '<div class="cycle-saved"><div class="cycle-saved-title">Você economizou desde o início</div><div class="cycle-saved-items">' + items.join('') + '</div></div>';
 
-    return '<div class="card cycle-card">' +
-      '<div class="cycle-head"><h2>Saldo do ciclo</h2><span class="muted">de ' + fmtDateShort_(model.fromYmd) + ' a ' + fmtDateShort_(model.toYmd) + ' · ' +
-        (model.daysLeft === 1 ? 'falta 1 dia' : 'faltam ' + model.daysLeft + ' dias') + '</span></div>' +
+    var selOptions = cycles.map(function (c) {
+      return { value: String(c.offset), label: (c.offset === 0 ? 'Atual · ' : '') + cycleRangeLabel_(c, today) };
+    });
+    var status = offset === 0 ? (model.daysLeft === 1 ? 'falta 1 dia' : 'faltam ' + model.daysLeft + ' dias') : 'ciclo encerrado';
+    var animate = !!STATE.cycleAnimate;
+    STATE.cycleAnimate = false; // só a troca de ciclo anima a barra de novo (entrar na aba já anima por .view-enter)
+    return '<div class="card cycle-card' + (animate ? ' cycle-anim' : '') + '">' +
+      '<div class="cycle-head"><h2>Saldo do ciclo</h2>' +
+        (cycles.length > 1 ? appSelectHtml_('cycle-select', selOptions, String(offset)) : '') + '</div>' +
+      '<div class="muted cycle-status">' + (cycles.length > 1 ? '' : 'de ' + fmtDateShort_(model.fromYmd) + ' a ' + fmtDateShort_(model.toYmd) + ' · ') + status + '</div>' +
       '<div class="cycle-big">' + big + '</div>' +
-      '<div class="cycle-bar" role="img" aria-label="Saldo do ciclo">' + bar + '</div>' +
-      (legend ? '<div class="cycle-legend">' + legend + '</div>' : '<div class="muted" style="font-size:13px;margin-top:8px">Nada saiu ainda neste ciclo.</div>') +
+      '<div class="cycle-bar-wrap"><div class="cycle-bar" role="img" aria-label="Saldo do ciclo">' + bar + '</div>' + marks + '</div>' +
+      (legend ? '<div class="cycle-legend">' + legend + '</div>' : '<div class="muted" style="font-size:13px;margin-top:8px">Nada saiu ' + (offset === 0 ? 'ainda ' : '') + 'neste ciclo.</div>') +
       saved +
     '</div>';
   }
@@ -5557,7 +5898,7 @@
     var whenLabel = fmtDate(t.date) + (t.time ? ' ' + t.time : '');
     var rowAttrs = txRowAttrs_(t);
     return '<div' + rowAttrs + '>' +
-      '<span style="font-size:13px">' + mainLabel + '<br><span class="muted">' + whenLabel + ' · ' + sub + '</span></span>' +
+      '<span class="tx-txt" style="font-size:13px"><span class="tx-l1">' + mainLabel + '</span><br><span class="muted tx-l2">' + whenLabel + ' · ' + sub + '</span></span>' +
       // Marca "Fora das análises" junto do VALOR (no fim do texto ela podia cair sozinha numa
       // linha quando o texto quebrava); nowrap mantém ícone e valor sempre lado a lado.
       '<span style="white-space:nowrap">' + txFlagIconHtml_(t) + netAmountSpanHtml_(t, cls, sign) + '</span>' +
@@ -5785,10 +6126,12 @@
     var root = document.createElement('div');
     root.id = 'refund-modal-root';
     document.body.appendChild(root);
-    root.innerHTML = '<div class="modal-backdrop refund-modal-backdrop" id="refund-modal-backdrop"><div class="modal">' + innerHtml + '</div></div>';
-    document.getElementById('refund-modal-backdrop').onclick = function (e) {
+    root.innerHTML = '<div class="modal-backdrop refund-modal-backdrop" id="refund-modal-backdrop"><div class="modal"><div class="sheet-grabber" aria-hidden="true"></div>' + innerHtml + '</div></div>';
+    var refundBd_ = document.getElementById('refund-modal-backdrop');
+    refundBd_.onclick = function (e) {
       if (e.target.id === 'refund-modal-backdrop') closeRefundModal_();
     };
+    attachSheetDrag_(refundBd_, closeRefundModal_);
     setTimeout(function () {
       var field = root.querySelector('input, select, textarea');
       if (field) field.focus();
@@ -6610,7 +6953,8 @@
         text: document.getElementById('f-text').value || undefined,
         dateFrom: document.getElementById('f-from').value || undefined,
         dateTo: document.getElementById('f-to').value || undefined,
-        kind: STATE.txFilters.kind, excludeForecastId: STATE.txFilters.excludeForecastId, onlyAnalyzed: STATE.txFilters.onlyAnalyzed // vindos do card Saldo do ciclo; só o X do cabeçalho limpa
+        kind: STATE.txFilters.kind, excludeForecastId: STATE.txFilters.excludeForecastId, onlyAnalyzed: STATE.txFilters.onlyAnalyzed,
+        excludeBalanceEntries: STATE.txFilters.excludeBalanceEntries, cycleLabels: STATE.txFilters.cycleLabels, cycleSegmentName: STATE.txFilters.cycleSegmentName // vindos do card Saldo do ciclo; só o X do cabeçalho limpa
       };
       STATE.txVisibleCount = TX_PAGE_SIZE; // novo filtro = recomeça do topo, não do "carregar mais" anterior
       STATE.txCalendarScrollLeft = null; // filtro novo = volta a rolar pras semanas mais recentes (ver renderTxCalendarWeeks_)
@@ -6676,7 +7020,7 @@
         if (cat) chips.push({ text: cat.name });
       });
     }
-    if (f.kind) chips.push({ text: f.excludeForecastId ? 'Outras receitas' : f.kind === 'income' ? 'Receitas' : 'Despesas' });
+    if (f.kind) chips.push({ text: f.cycleSegmentName || (f.excludeForecastId ? 'Outras receitas' : f.kind === 'income' ? 'Receitas' : 'Despesas') });
     if (f.text) chips.push({ text: f.text, isSearch: true });
     if (f.dateFrom || f.dateTo) {
       var dateLabel = f.dateFrom && f.dateTo ? fmtDate(f.dateFrom) + '–' + fmtDate(f.dateTo)
@@ -6710,6 +7054,8 @@
     if (f.excludeForecastId && t.forecastId === f.excludeForecastId) return false;
     if (f.onlyAnalyzed && t.excludeFromAnalysis) return false;
     if (f.excludeBalanceEntries && isAccountBalanceEntry_(t)) return false;
+    // Filtro vindo da legenda do card Saldo do ciclo: só as despesas (líquidas de reembolso) do grupo clicado.
+    if (f.cycleLabels && (!(netAmountOfPassive_(t) > 0.004) || f.cycleLabels.indexOf(cycleSegmentLabelOfTx_(t)) === -1)) return false;
     if (f.text) {
       var needle = f.text.trim().toLowerCase();
       // (Number||0).toLocaleString('pt-BR') em vez de fmtMoney: fmtMoney usa o formato de
@@ -6978,6 +7324,11 @@
   function removeTransactionOptimistically_(id) {
     STATE.deletingIds.push(id);
     render();
+    commitTransactionDelete_(id);
+  }
+  /** Manda a exclusão ao servidor (o lançamento já está escondido em STATE.deletingIds). Separada pra o "Desfazer" do
+   *  swipe poder adiar só esta parte. */
+  function commitTransactionDelete_(id) {
     // Sucesso não precisa desmarcar/re-renderizar aqui: applyBootstrapData já limpa
     // deletingIds inteiro assim que o refreshAll do afterMutation_ trouxer dado de
     // verdade (sem esse lançamento). Mesmo motivo do atraso de pendingTransactions no
@@ -15223,10 +15574,20 @@
       var fabRect = fab.getBoundingClientRect();
       var onLeft = navSide_() === 'left';
       var viewportW = document.documentElement.clientWidth;
-      stack.style.alignItems = onLeft ? 'flex-start' : 'flex-end';
+      var inBar = !!(fab.closest && fab.closest('nav.tabbar'));
+      stack.style.alignItems = inBar ? 'center' : (onLeft ? 'flex-start' : 'flex-end');
       stack.style.padding = '0 0 ' + HOLD_REVEAL_GAP_PX + 'px';
-      stack.style.left = onLeft ? fabRect.left + 'px' : 'auto';
-      stack.style.right = onLeft ? 'auto' : (viewportW - fabRect.right) + 'px';
+      if (inBar) {
+        // "+" no centro da barra (celular): a coluna de atalhos se centraliza nele (largura fixa pro centro bater).
+        var stackW = Math.min(300, viewportW - 16);
+        stack.style.width = stackW + 'px';
+        stack.style.left = Math.max(8, Math.min(viewportW - stackW - 8, fabRect.left + fabRect.width / 2 - stackW / 2)) + 'px';
+        stack.style.right = 'auto';
+      } else {
+        stack.style.width = '';
+        stack.style.left = onLeft ? fabRect.left + 'px' : 'auto';
+        stack.style.right = onLeft ? 'auto' : (viewportW - fabRect.right) + 'px';
+      }
       stack.style.bottom = (window.innerHeight - fabRect.top) + 'px';
       stack.style.transform = 'translateY(6px)';
 
@@ -15379,6 +15740,35 @@
 
     var fromField, toField, accountField, categoryField;
 
+    // Celular: Data, Horário (e Descrição, na transferência) ficam recolhidos em "Mais detalhes" -- o fluxo
+    // curto é Valor -> Categoria -> Conta. No PC tudo aparece sempre (o CSS esconde só o botão).
+    // Já nasce aberto quando o lançamento vem com uma data diferente de hoje (ex.: bolinha vermelha de um dia passado).
+    var txMoreOpen_ = !!(opts.date && opts.date !== todayYmd());
+    function txMoreToggleHtml_() {
+      return '<div class="tx-more-wrap"><button type="button" class="tx-more-toggle" id="t-more-toggle" aria-expanded="false">' +
+        '<span class="tx-more-label">Mais detalhes</span>' +
+        '<svg class="tx-more-chevron" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="6 9 12 15 18 9"/></svg>' +
+        '</button></div>';
+    }
+    function bindTxMoreToggle_(container) {
+      var btn = document.getElementById('t-more-toggle');
+      if (!btn) return;
+      function apply_() {
+        container.classList.toggle('tx-more-open', txMoreOpen_);
+        btn.setAttribute('aria-expanded', txMoreOpen_ ? 'true' : 'false');
+        btn.querySelector('.tx-more-label').textContent = txMoreOpen_ ? 'Menos detalhes' : 'Mais detalhes';
+      }
+      apply_();
+      btn.onclick = function () {
+        txMoreOpen_ = !txMoreOpen_;
+        apply_();
+        if (txMoreOpen_) {
+          var first = container.querySelector('.tx-detail');
+          if (first && first.scrollIntoView) { try { first.scrollIntoView({ block: 'nearest', behavior: motionOk_ ? 'smooth' : 'auto' }); } catch (_) { /* navegador antigo */ } }
+        }
+      };
+    }
+
     function renderFields() {
       var container = document.getElementById('tx-form-fields');
       // Data/Horário/Valor/Descrição existem nas 3 modalidades com o mesmo sentido —
@@ -15416,15 +15806,15 @@
       }
       if (kind === 'transfer') {
         container.innerHTML =
-          '<div class="field" style="display:flex;gap:8px">' +
+          '<div class="field tx-f-date tx-detail" style="display:flex;gap:8px">' +
             '<div style="flex:1"><label>Data</label><input type="date" id="t-date" value="' + preservedDate + '"></div>' +
             '<div style="flex:1"><label>Horário</label><input type="time" id="t-time" value="' + preservedTime + '"></div>' +
           '</div>' +
-          '<div class="field"><label>De</label><div id="t-from-field" class="capsule-field"></div></div>' +
-          '<div class="field"><label>Para</label><div id="t-to-field" class="capsule-field"></div></div>' +
-          '<div class="field"><label>Valor</label><input type="text" id="t-amount"></div>' +
-          '<div class="field"><label>Descrição</label><input id="t-desc" value="' + escapeHtml(preservedDesc) + '"></div>' +
-          '<div id="t-bill-field"></div>';
+          '<div class="field tx-f-from"><label>De</label><div id="t-from-field" class="capsule-field"></div></div>' +
+          '<div class="field tx-f-to"><label>Para</label><div id="t-to-field" class="capsule-field"></div></div>' +
+          '<div class="field tx-f-amount"><label>Valor</label><input type="text" id="t-amount"></div>' +
+          '<div class="field tx-f-desc tx-detail"><label>Descrição</label><input id="t-desc" value="' + escapeHtml(preservedDesc) + '"></div>' +
+          '<div id="t-bill-field" class="tx-f-bill"></div>' + txMoreToggleHtml_();
         setupMoneyInput(document.getElementById('t-amount'), preservedAmount);
         var accountItems = rankedAccountItems();
         var firstAcc_ = accountItems[0] ? accountItems[0].value : null;
@@ -15444,19 +15834,19 @@
           : rankedAccountItems(function (a) { return a.type !== 'credit_card' && a.type !== 'investment'; });
         var counterpartyLabel = kind === 'income' ? 'Recebido de' : 'Pago a';
         container.innerHTML =
-          '<div class="field" style="display:flex;gap:8px">' +
+          '<div class="field tx-f-date tx-detail" style="display:flex;gap:8px">' +
             '<div style="flex:1"><label>Data</label><input type="date" id="t-date" value="' + preservedDate + '"></div>' +
             '<div style="flex:1"><label>Horário</label><input type="time" id="t-time" value="' + preservedTime + '"></div>' +
           '</div>' +
-          '<div class="field"><label>Conta</label><div id="t-account-field" class="capsule-field"></div></div>' +
-          '<div class="field">' +
+          '<div class="field tx-f-account"><label>Conta</label><div id="t-account-field" class="capsule-field"></div></div>' +
+          '<div class="field tx-f-category">' +
             '<div style="display:flex;justify-content:space-between;align-items:baseline;flex-wrap:wrap;gap:2px 8px">' +
               '<label style="margin-bottom:0">Categoria</label>' +
               '<span id="t-remember-cat-field"></span>' +
             '</div>' +
             '<div id="t-category-field" class="capsule-field"></div>' +
           '</div>' +
-          '<div class="field" style="display:flex;gap:8px">' +
+          '<div class="field tx-f-amount" style="display:flex;gap:8px">' +
             '<div style="flex:1;min-width:0">' +
               '<div style="display:flex;justify-content:space-between;align-items:baseline;flex-wrap:wrap;gap:2px 8px">' +
                 '<label style="margin-bottom:0">Valor</label>' +
@@ -15471,7 +15861,7 @@
             '</div>' +
             '<div style="flex:1;min-width:0"><label>Parcelas</label><input type="number" id="t-installments" min="1" value="1"></div>' +
           '</div>' +
-          '<div class="field" style="display:flex;gap:8px">' +
+          '<div class="field tx-f-who" style="display:flex;gap:8px">' +
             '<div style="flex:1;min-width:0">' +
               '<div style="display:flex;justify-content:space-between;align-items:baseline;flex-wrap:nowrap;gap:2px 8px">' +
                 '<label style="margin-bottom:0;white-space:nowrap;flex-shrink:0">' + counterpartyLabel + '</label>' +
@@ -15483,7 +15873,7 @@
               '<div style="display:flex;align-items:baseline"><label style="margin-bottom:0">Referente a</label></div>' +
               '<input id="t-desc" value="' + escapeHtml(preservedDesc) + '">' +
             '</div>' +
-          '</div>';
+          '</div>' + txMoreToggleHtml_();
         setupCounterpartySuggestions_(document.getElementById('t-counterparty'));
         setupMoneyInput(document.getElementById('t-amount'), preservedAmount);
         document.getElementById('t-amount').addEventListener('input', function () { maybeSuggestOutlierT_(); maybeSuggestForecastLinkT_(); });
@@ -15528,6 +15918,7 @@
         updateInstallmentsField();
         updateForecastToggleT_();
       }
+      bindTxMoreToggle_(container);
       isFirstRender_ = false;
     }
 
@@ -15897,7 +16288,7 @@
    *  hora, então esse risco não existe mais. */
   function isSwipeBlocked_() {
     return !!(swipe_ || document.getElementById('modal-backdrop') || document.getElementById('refund-modal-root') ||
-      document.getElementById('swipe-overlay'));
+      document.getElementById('dd-sheet-backdrop') || document.getElementById('swipe-overlay'));
   }
 
   /** View do vizinho na direção do arrasto — dx<0 (arrasta pra esquerda) revela a
@@ -16611,6 +17002,159 @@
     }
   }
 
+  // ---------- celular: deslizar a linha de um lançamento pra ESQUERDA exclui, com "Desfazer" ----------
+  // A exclusão de verdade (servidor) só roda depois da janela do "Desfazer"; até lá o lançamento fica escondido
+  // (STATE.deletingIds) e voltar atrás é só reexibi-lo. Deslizar pra DIREITA continua trocando de aba. Parcelas ficam de
+  // fora (excluir o grupo inteiro pede confirmação, no popup do lançamento).
+  var ROW_DEL_ARM_PX_ = 96;       // a partir daqui, soltar exclui
+  var ROW_DEL_MAX_PX_ = 190;      // além disso o arrasto "estica" com resistência
+  var UNDO_DELETE_MS_ = 5000;
+  var rowSwipe_ = null;
+  var pendingUndoDeletes_ = [];   // [{ id, toast }]
+  function rowSwipeDeletable_(rowEl) {
+    if (!rowEl || !rowEl.dataset || !rowEl.dataset.tx) return false;
+    var id = rowEl.dataset.tx;
+    if (STATE.deletingIds.indexOf(id) !== -1) return false;
+    var t = STATE.allTransactions.filter(function (x) { return x.id === id; })[0];
+    return !!t && !txIsLocked_(t) && !t.installmentSeq && !t.installmentGroupId;
+  }
+  function onRowSwipeStart_(e) {
+    rowSwipe_ = null;
+    if (!isMobileLayout_() || e.touches.length !== 1 || isSwipeBlocked_()) return;
+    var row = e.target && e.target.closest && e.target.closest('.row-clickable[data-tx]');
+    if (!row || !rowSwipeDeletable_(row)) return;
+    var tch = e.touches[0];
+    rowSwipe_ = { row: row, id: row.dataset.tx, startX: tch.clientX, startY: tch.clientY, dx: 0, phase: 'undecided', wrap: null, armed: false, t0: Date.now() };
+  }
+  /** Embrulha a linha numa faixa vermelha "Excluir" que o arrasto vai revelando (a faixa recorta o que sai da linha). */
+  function rowSwipeBegin_(rs) {
+    var row = rs.row;
+    var wrap = document.createElement('div');
+    wrap.className = 'row-swipe-wrap';
+    wrap.innerHTML = '<div class="row-swipe-under"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h16M10 11v6M14 11v6M6 7l1 12a2 2 0 0 0 2 2h6a2 2 0 0 0 2-2l1-12M9 7V4h6v3"/></svg><span class="row-swipe-label">Excluir</span></div>';
+    row.parentNode.insertBefore(wrap, row);
+    wrap.appendChild(row);
+    row.classList.add('row-swiping');
+    rs.wrap = wrap;
+  }
+  function rowSwipeRestore_(rs) {
+    if (!rs.wrap || !rs.wrap.parentNode) return;
+    rs.wrap.parentNode.insertBefore(rs.row, rs.wrap);
+    rs.wrap.remove();
+    rs.row.classList.remove('row-swiping');
+    rs.row.style.transform = ''; rs.row.style.transition = '';
+  }
+  function onRowSwipeMove_(e) {
+    var rs = rowSwipe_;
+    if (!rs || e.touches.length !== 1) return;
+    var tch = e.touches[0];
+    var dx = tch.clientX - rs.startX, dy = tch.clientY - rs.startY;
+    if (rs.phase === 'undecided') {
+      if (Math.abs(dx) < 8 && Math.abs(dy) < 8) return;
+      // Vertical = rolagem; pra direita = troca de aba (gesto da página, não é desta linha).
+      if (Math.abs(dy) >= Math.abs(dx) || dx > 0) { rs.phase = 'ignore'; return; }
+      rs.phase = 'drag';
+      hideTooltip_();
+      rowSwipeBegin_(rs);
+    }
+    if (rs.phase !== 'drag') return;
+    if (swipe_) swipe_.phase = 'none'; // a troca de aba da página não pode pegar este gesto
+    if (e.cancelable) e.preventDefault();
+    var d = Math.min(0, dx);
+    var shown = d < -ROW_DEL_MAX_PX_ ? -(ROW_DEL_MAX_PX_ + (-d - ROW_DEL_MAX_PX_) * 0.25) : d;
+    rs.dx = shown;
+    rs.row.style.transition = 'none';
+    rs.row.style.transform = 'translateX(' + shown + 'px)';
+    var armed = -shown >= ROW_DEL_ARM_PX_;
+    if (armed !== rs.armed) {
+      rs.armed = armed;
+      rs.wrap.classList.toggle('armed', armed);
+      rs.wrap.querySelector('.row-swipe-label').textContent = armed ? 'Solte pra excluir' : 'Excluir';
+      if (armed && navigator.vibrate) { try { navigator.vibrate(8); } catch (_) { /* sem vibração */ } }
+    }
+  }
+  function onRowSwipeEnd_(e) {
+    var rs = rowSwipe_;
+    rowSwipe_ = null;
+    if (!rs || rs.phase !== 'drag') return;
+    var speed = -rs.dx / Math.max(1, Date.now() - rs.t0);
+    var commit = e.type !== 'touchcancel' && (rs.armed || (speed > 0.8 && -rs.dx > 40));
+    var row = rs.row, wrap = rs.wrap;
+    if (!commit) {
+      if (!motionOk_) { rowSwipeRestore_(rs); return; }
+      row.style.transition = 'transform .28s cubic-bezier(.2,.8,.2,1)';
+      row.style.transform = '';
+      setTimeout(function () { rowSwipeRestore_(rs); }, 290);
+      return;
+    }
+    if (!motionOk_) { queueUndoDelete_(rs.id); return; }
+    // Sai pela esquerda, depois a faixa encolhe até sumir (a lista fecha o vão), e só então o lançamento é marcado como excluído.
+    row.style.transition = 'transform .2s ease-in';
+    row.style.transform = 'translateX(-105%)';
+    setTimeout(function () {
+      var h = wrap.offsetHeight;
+      wrap.style.height = h + 'px';
+      void wrap.offsetHeight;
+      wrap.style.transition = 'height .2s ease, opacity .2s ease';
+      wrap.style.height = '0px';
+      wrap.style.opacity = '0';
+      setTimeout(function () { queueUndoDelete_(rs.id); }, 210);
+    }, 190);
+  }
+  /** Esconde o lançamento na hora e abre a janela do "Desfazer"; passou o tempo (ou a página vai fechar), exclui de verdade. */
+  function queueUndoDelete_(id) {
+    if (STATE.deletingIds.indexOf(id) === -1) STATE.deletingIds.push(id);
+    var entry = { id: id, toast: null };
+    pendingUndoDeletes_.push(entry);
+    entry.toast = showUndoToast_('Lançamento excluído', UNDO_DELETE_MS_, function (undone) {
+      pendingUndoDeletes_ = pendingUndoDeletes_.filter(function (x) { return x !== entry; });
+      if (undone) {
+        STATE.deletingIds = STATE.deletingIds.filter(function (x) { return x !== id; });
+        render();
+      } else {
+        commitTransactionDelete_(id);
+      }
+    });
+    render();
+  }
+  /** Aviso com botão "Desfazer" e barrinha de contagem regressiva; fica perto do polegar, acima da barra de abas. */
+  function showUndoToast_(msg, durationMs, onDone) {
+    var box = document.getElementById('undo-toast-container');
+    if (!box) {
+      box = document.createElement('div');
+      box.id = 'undo-toast-container';
+      document.body.appendChild(box);
+    }
+    var el = document.createElement('div');
+    el.className = 'toast toast-undo';
+    el.innerHTML = '<span class="toast-undo-msg"></span><button type="button" class="toast-undo-btn">Desfazer</button>' +
+      (motionOk_ ? '<span class="toast-undo-bar" style="animation-duration:' + durationMs + 'ms"></span>' : '');
+    el.firstChild.textContent = msg;
+    box.appendChild(el);
+    var finished = false, timer = null;
+    function finish(undone) {
+      if (finished) return;
+      finished = true;
+      clearTimeout(timer);
+      el.classList.add('toast-fade-out');
+      setTimeout(function () { el.remove(); }, 300);
+      onDone(!!undone);
+    }
+    el.querySelector('.toast-undo-btn').onclick = function () { finish(true); };
+    timer = setTimeout(function () { finish(false); }, durationMs);
+    return { finish: finish };
+  }
+  function flushPendingUndoDeletes_() {
+    pendingUndoDeletes_.slice().forEach(function (e) { if (e.toast) e.toast.finish(false); });
+  }
+  window.addEventListener('pagehide', flushPendingUndoDeletes_);
+  document.addEventListener('visibilitychange', function () { if (document.visibilityState === 'hidden') flushPendingUndoDeletes_(); });
+  // Registrados ANTES dos do swipe entre abas (logo abaixo): na hora de decidir, este gesto tem prioridade na esquerda.
+  document.addEventListener('touchstart', onRowSwipeStart_, { passive: true });
+  document.addEventListener('touchmove', onRowSwipeMove_, { passive: false });
+  document.addEventListener('touchend', onRowSwipeEnd_, { passive: true });
+  document.addEventListener('touchcancel', onRowSwipeEnd_, { passive: true });
+
   document.addEventListener('touchstart', onSwipeTouchStart_, { passive: true });
   document.addEventListener('touchmove', onSwipeTouchMove_, { passive: false });
   document.addEventListener('touchend', onSwipeTouchEnd_, { passive: true });
@@ -16618,18 +17162,143 @@
   document.addEventListener('wheel', onSwipeWheel_, { passive: false });
 
   // ---------- modal ----------
+  // ---------- celular: janelas viram "bottom sheets" (PC não muda) ----------
+  // Layout de celular = largura <= 640px (mesmo ponto de corte do CSS). Tudo daqui pra baixo só age nele.
+  var MOBILE_MQ_ = window.matchMedia ? window.matchMedia('(max-width: 640px)') : null;
+  function isMobileLayout_() { return !!(MOBILE_MQ_ && MOBILE_MQ_.matches); }
+  function isTextEntryEl_(el) {
+    if (!el || !el.tagName) return false;
+    if (el.tagName === 'TEXTAREA') return true;
+    if (el.tagName !== 'INPUT') return false;
+    var t = (el.getAttribute('type') || 'text').toLowerCase();
+    return ['text', 'search', 'number', 'tel', 'email', 'url', 'password', ''].indexOf(t) !== -1;
+  }
+  /**
+   * Mantém --vvh/--vvt (altura e topo da área REALMENTE visível, descontado o teclado) e a classe kb-open no <html>.
+   * As janelas do celular se medem por elas: sobem junto do teclado e o botão Salvar fica sempre à vista.
+   */
+  function setupViewportVars_() {
+    var vv = window.visualViewport;
+    var rootEl = document.documentElement;
+    var baseH = window.innerHeight;
+    function sync() {
+      var h = vv ? vv.height : window.innerHeight;
+      var top = vv ? vv.offsetTop : 0;
+      rootEl.style.setProperty('--vvh', Math.round(h) + 'px');
+      rootEl.style.setProperty('--vvt', Math.round(top) + 'px');
+      baseH = Math.max(baseH, window.innerHeight, h);
+      rootEl.classList.toggle('kb-open', isTextEntryEl_(document.activeElement) && baseH - h > 120);
+    }
+    if (vv) {
+      vv.addEventListener('resize', sync);
+      vv.addEventListener('scroll', sync);
+    }
+    window.addEventListener('resize', sync);
+    window.addEventListener('orientationchange', function () { baseH = 0; setTimeout(function () { baseH = window.innerHeight; sync(); }, 350); });
+    document.addEventListener('focusout', function () { setTimeout(sync, 60); });
+    sync();
+  }
+  /** Dicas pro teclado do celular: tecla "próximo/ok", maiúscula no início e teclado numérico nos números. */
+  function applyKeyboardHints_(el) {
+    if (!isTextEntryEl_(el) || el.tagName === 'TEXTAREA') return;
+    var type = (el.getAttribute('type') || 'text').toLowerCase();
+    if (type === 'number') {
+      if (!el.hasAttribute('inputmode')) el.setAttribute('inputmode', 'numeric');
+    } else if (type === 'text' || type === 'search') {
+      if (!el.hasAttribute('autocapitalize') && !el.classList.contains('input-money')) el.setAttribute('autocapitalize', 'sentences');
+    }
+    if (!el.hasAttribute('enterkeyhint')) {
+      var modal = el.closest('.modal');
+      var fields = modal ? Array.prototype.filter.call(modal.querySelectorAll('input, textarea'), isTextEntryEl_) : [];
+      el.setAttribute('enterkeyhint', fields.length && fields[fields.length - 1] === el ? 'done' : 'next');
+    }
+  }
+  document.addEventListener('focusin', function (e) {
+    var el = e.target;
+    if (!isMobileLayout_() || !el || !el.closest || !el.closest('.modal')) return;
+    applyKeyboardHints_(el);
+    if (!isTextEntryEl_(el)) return;
+    // O teclado leva ~300 ms pra subir e redimensionar a área visível: só depois centraliza o campo focado.
+    setTimeout(function () {
+      if (document.activeElement !== el) return;
+      try { el.scrollIntoView({ block: 'center', behavior: motionOk_ ? 'smooth' : 'auto' }); } catch (_) { /* navegador antigo */ }
+    }, 320);
+  });
+  /** Arrastar a alça pra baixo fecha a janela (solta antes do limite, ela volta). Fora do celular não existe alça. */
+  function attachSheetDrag_(backdrop, closeFn) {
+    var modal = backdrop && backdrop.querySelector('.modal, .dd-sheet');
+    var grab = modal && modal.querySelector('.sheet-grabber');
+    if (!grab) return;
+    var startY = 0, dy = 0, t0 = 0, dragging = false;
+    function settle_(ms, transform) {
+      modal.style.transition = motionOk_ ? 'transform ' + ms + 'ms cubic-bezier(.2,.8,.2,1)' : 'none';
+      modal.style.transform = transform;
+    }
+    grab.addEventListener('touchstart', function (e) {
+      if (e.touches.length !== 1) return;
+      startY = e.touches[0].clientY; dy = 0; t0 = Date.now(); dragging = true;
+      modal.style.transition = 'none';
+    }, { passive: true });
+    grab.addEventListener('touchmove', function (e) {
+      if (!dragging) return;
+      dy = Math.max(0, e.touches[0].clientY - startY);
+      modal.style.transform = 'translateY(' + dy + 'px)';
+      backdrop.style.background = 'rgba(0,0,0,' + (0.4 * (1 - Math.min(1, dy / 420))).toFixed(3) + ')';
+      e.preventDefault();
+    }, { passive: false });
+    function end_() {
+      if (!dragging) return;
+      dragging = false;
+      var speed = dy / Math.max(1, Date.now() - t0);
+      if (dy > 110 || (speed > 0.6 && dy > 30)) {
+        settle_(220, 'translateY(100%)');
+        backdrop.style.transition = motionOk_ ? 'background .22s ease' : 'none';
+        backdrop.style.background = 'rgba(0,0,0,0)';
+        setTimeout(closeFn, motionOk_ ? 200 : 0);
+      } else {
+        settle_(260, '');
+        backdrop.style.background = '';
+      }
+    }
+    grab.addEventListener('touchend', end_, { passive: true });
+    grab.addEventListener('touchcancel', end_, { passive: true });
+  }
+  /** O botão principal (#m-submit, sozinho ou num par) fica preso no fim da janela, acima do teclado. */
+  function markSheetActions_(modal) {
+    var btn = modal && modal.querySelector('#m-submit');
+    if (!btn) return;
+    var el = btn;
+    while (el.parentNode && el.parentNode !== modal) el = el.parentNode;
+    if (el === btn) {
+      // Botão solto direto na janela: embrulha numa faixa própria (a faixa é que fica presa, com o fundo da janela).
+      var strip = document.createElement('div');
+      btn.parentNode.insertBefore(strip, btn);
+      strip.appendChild(btn);
+      el = strip;
+    }
+    if (el.parentNode === modal) el.classList.add('sheet-actions');
+  }
   function openModal(innerHtml) {
     var root = document.getElementById('modal-root');
     var hadModal_ = !!root.querySelector('.modal');
-    root.innerHTML = '<div class="modal-backdrop" id="modal-backdrop"><div class="modal">' + innerHtml + '</div></div>';
+    root.innerHTML = '<div class="modal-backdrop" id="modal-backdrop"><div class="modal"><div class="sheet-grabber" aria-hidden="true"></div>' + innerHtml + '</div></div>';
     modalOpenMotion_(root, hadModal_);
-    document.getElementById('modal-backdrop').onclick = function (e) {
+    var backdropEl_ = document.getElementById('modal-backdrop');
+    backdropEl_.onclick = function (e) {
       if (e.target.id === 'modal-backdrop') closeModal();
     };
+    markSheetActions_(backdropEl_.querySelector('.modal'));
+    attachSheetDrag_(backdropEl_, closeModal);
     // Espera o restante da função que chamou openModal terminar de montar campos
     // (ex: cápsulas) antes de focar, senão focaria algo que ainda vai ser substituído.
     setTimeout(function () {
-      var field = document.querySelector('.modal input, .modal select, .modal textarea');
+      var field;
+      if (isMobileLayout_()) {
+        // Celular: foca o Valor quando existe; senão o primeiro campo de TEXTO (data/hora/lista não devem abrir o teclado).
+        field = document.querySelector('.modal #t-amount') || Array.prototype.filter.call(document.querySelectorAll('.modal input, .modal textarea'), isTextEntryEl_)[0];
+      } else {
+        field = document.querySelector('.modal input, .modal select, .modal textarea');
+      }
       if (field) field.focus();
     }, 0);
   }
@@ -17875,6 +18544,32 @@
       });
     }).observe(document.body, { childList: true, subtree: true });
   }
+  /**
+   * Celular (<= 640px): a barra fica com 4 abas fixas (Início, Extrato, Planejamento, Mais) e o "+" no CENTRO dela;
+   * Reembolsos desce pro painel "Mais" (com Contas, Categorias e Estabelecimentos). No PC nada muda: o "+" volta pra
+   * coluna ao lado da barra e Reembolsos pra barra. Os mesmos botões mudam de lugar (os eventos vão junto).
+   */
+  function applyMobileDock_() {
+    var nav = document.querySelector('nav.tabbar');
+    var fab = document.getElementById('fab-add');
+    var panel = document.getElementById('tabbar-more');
+    var more = document.getElementById('tab-more');
+    var side = document.querySelector('.dock-side');
+    var refunds = document.querySelector('.tab-btn[data-view="refunds"]');
+    if (!nav || !fab || !panel || !more || !side || !refunds) return;
+    var moved = false;
+    if (isMobileLayout_()) {
+      var budgets = nav.querySelector('.tab-btn[data-view="budgets"]');
+      if (fab.parentNode !== nav) { nav.insertBefore(fab, budgets); moved = true; }
+      fab.classList.add('fab-in-bar');
+      if (refunds.parentNode !== panel) { panel.insertBefore(refunds, panel.firstChild); moved = true; }
+    } else {
+      if (fab.parentNode !== side) { side.appendChild(fab); moved = true; }
+      fab.classList.remove('fab-in-bar');
+      if (refunds.parentNode !== nav) { nav.insertBefore(refunds, more); moved = true; }
+    }
+    if (moved) syncTabbar_(STATE.currentView); // refaz o "Mais" (mostra Reembolsos quando ativa) e mede os nomes de novo
+  }
   function setupSidebar_() {
     var nav = document.querySelector('nav.tabbar');
     if (!nav) return;
@@ -17955,8 +18650,12 @@
 
   document.addEventListener('DOMContentLoaded', function () {
     applyNavSide_();
+    setupViewportVars_();
     setupSidebar_();
     setupFabSpeedDial_();
+    applyMobileDock_();
+    if (MOBILE_MQ_) { if (MOBILE_MQ_.addEventListener) MOBILE_MQ_.addEventListener('change', applyMobileDock_); else if (MOBILE_MQ_.addListener) MOBILE_MQ_.addListener(applyMobileDock_); }
+    window.addEventListener('resize', applyMobileDock_); // redundante com o change acima, mas cobre giro/redimensionamento em que ele não vem
     setupReviewButton_();
     setupMarginSwitchZones_();
     setupScrollToTopButton_();
